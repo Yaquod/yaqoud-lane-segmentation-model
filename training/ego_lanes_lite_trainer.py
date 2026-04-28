@@ -61,7 +61,11 @@ class EgoLanesLiteTrainer(LiteTrainerBase):
 
         # build the downsample factor for the gt (it is resized)
         # deeplabv3plus by default downsamples by 4x (output_stride=16, then upsampling=4)
-        downsample_factor = int((4 / self.head_cfg.get("head_upsampling", 1)))
+        # This can be overridden by loss_cfg.downsample_factor if specified
+        downsample_factor = self.loss_cfg.get(
+            "downsample_factor",
+            int((4 / self.head_cfg.get("head_upsampling", 1))),
+        )
 
         print(
             f"Using downsample factor of {downsample_factor} for the GT in the loss function."

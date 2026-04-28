@@ -1,140 +1,221 @@
+# ============================================
+# EgoLanesLite Training Configuration
+# ============================================
+# This file configures the training pipeline for lane detection using EgoLanesLite.
+# Each section is explained with comments below.
+
+# ============================================
+# EXPERIMENT CONFIGURATION
+# ============================================
+# Top-level experiment settings for tracking and reproducibility
 experiment:
-  name: "EgoLanesLite_Train"
-  output_dir: "runs/training/EgoLanesLite/"
-  seed: 42
-  device: "cuda" # "cuda", "cuda:0", or "cpu"
+  name: "EgoLanesLite_Train"          # Experiment name (used in logs, checkpoints, W&B)
+  output_dir: "runs/training/EgoLanesLite/"  # Root directory for all outputs
+  seed: 42                            # Random seed for reproducibility across numpy, torch, random
+  device: "cuda"                      # Device selection: "cuda", "cuda:0", or "cpu"
+  
   wandb:
-    enabled: true
-    project_name: "EgoLanesLite" #it is fixed from the account
+    enabled: true                     # Enable/Disable Weights & Biases telemetry
+    project_name: "EgoLanesLite"      # W&B project name (must exist in your account)
 
+# ============================================
+# CHECKPOINT CONFIGURATION  
+# ============================================
+# Controls checkpoint loading/resume behavior
 checkpoint:
-  load_from: EgoLanes_Lite.pth
-  strict_load: true # whether to strictly enforce that the keys in state_dict match the keys returned by the model's state_dict function
-  fine_tune: false # true loads model weights only and resets optimizer/scheduler/counters
+  load_from: "EgoLanes_Lite.pth"      # Path to checkpoint file to load
+                                      # Leave empty/null to start from scratch
+  strict_load: true                   # True: fail if keys don't match exactly
+                                      # False: load only matching keys (useful for architecture changes)
+  fine_tune: false                    # True: load weights only, reset optimizer/scheduler/counters
+                                      # False: load full checkpoint state (optimizer, scheduler, epoch)
+                                      # Set true when adapting pretrained model to new task
 
+# ============================================
+# DATASET CONFIGURATION
+# ============================================
+# Defines which datasets to use and where to find them
 dataset:
-  training_sets: ["carla"]
-  validation_sets: ["carla"]
-  carla_root: "dataset/CarlaEgoLanes/processed"
+  training_sets: ["carla"]            # List of datasets for training: ["carla"], ["tulane"], etc.
+  validation_sets: ["carla"]          # List of datasets for validation
+  carla_root: "dataset/CarlaEgoLanes/processed"  # Root path to processed CarlaEgoLanes dataset
 
-  #augmentations settings for all datasets
-  augmentations:
-    normalize:
-      enabled: true
-      mean: [0.485, 0.456, 0.406] # imagenet mean, RGB ORDER
-      std: [0.229, 0.224, 0.225] # imagenet std, RGB ORDER
+# ============================================
+# AUGMENTATION CONFIGURATION
+# ============================================
+# Image preprocessing and data augmentation settings
+# These apply to all datasets uniformly
+augmentations:
+  normalize:
+    enabled: true                     # Enable/disable normalization
+    mean: [0.485, 0.456, 0.406]       # ImageNet mean (RGB order) - keep if using pretrained backbone
+    std: [0.229, 0.224, 0.225]        # ImageNet std (RGB order)
+  
+  rescaling:
+    enabled: true                     # Enable/disable resizing
+    mode: "fixed_resize"              # Options: "fixed_resize" | "random_crop"
+    # For random_crop mode:
+    scale_range: [1.0, 1.0]           # [min_scale, max_scale] for random cropping
+    
+  width: 800                          # Target image width
+  height: 400                         # Target image height
+  
+  # Horizontal flip (symmetry augmentation)
+  flip_prob: 0.5                      # Probability of horizontal flip (0.0-1.0, 0=never, 1=always)
+  
+  # Random grid shuffle (optional)
+  random_grid_shuffle:
+    enabled: false                    # Set true to enable grid-based image shuffling
+    grid: [1, 2]                      # Grid dimensions [rows, cols]
+    prob: 0.25                        # Probability of applying shuffle
+    
+  # Noise injection (for robustness)
+  noise:
+    profile: "none"                   # Options: "none" | "moderate" | "heavy" | "roadwork"
+    prob: 0.5                         # Probability noise is applied (0.0-1.0)
 
-    rescaling:
-      enabled: true
-      mode: "fixed_resize" # fixed_resize | random_crop
-
-      #for random cropping
-      scale_range: [1.0, 1.0] # min and max scale for random cropping
-
-      width: 800
-      height: 400
-
-    # Horizontal flip
-    flip_prob: 0.5
-
-    # Optional random grid shuffle
-    random_grid_shuffle:
-      enabled: false # set true if you want it
-      grid: [1, 2]
-      prob: 0.25
-
-    # Noise settings
-    noise:
-      profile: "none" # none | moderate | heavy | roadwork
-      prob: 0.5 # probability noise is applied
-
+# ============================================
+# DATALOADER CONFIGURATION
+# ============================================
+# PyTorch DataLoader settings for efficient data loading
 dataloader:
-  batch_size: 16 # how many samples per optimization step
-  num_workers: 8 # how many workers for data loading
-  pin_memory: true # pin memory for dataloader
-  persistent_workers: true # keep workers alive between epochs
-  drop_last: true # drop last incomplete batch
-  prefetch_factor: 2 # number of batches to prefetch
-  shuffle_train: true # shuffle training data (random order, but complete every sample before epoch)
-  shuffle_val: false # do not shuffle validation data
+  batch_size: 16                      # Samples per optimization step (affects VRAM and learning rate)
+  num_workers: 8                      # Number of worker processes for data loading (0=main process)
+  pin_memory: true                    # Pin memory for faster CPU->GPU transfer
+  persistent_workers: true            # Keep workers alive across epochs (reduces startup overhead)
+  drop_last: true                     # Drop incomplete batch at epoch end (ensures uniform batch sizes)
+  prefetch_factor: 2                  # Batches prefetched by each worker
+  shuffle_train: true                 # Shuffle training data each epoch
+  shuffle_val: false                  # Never shuffle validation data
 
+# ============================================
+# TRAINING CONFIGURATION
+# ============================================
+# Training loop settings (epochs vs steps, gradient accumulation)
 training:
-  mode: "epoch" # "epoch" or "steps"
-  max_epochs: 30 # used if mode == "epoch"
-  max_steps: 150000 # used if mode == "steps". step = optimization step (so affected by batch size and grad accum)
-  grad_accum_steps: 1
+  mode: "epoch"                       # Training termination mode: "epoch" (epoch-based) or "steps" (step-based)
+  max_epochs: 30                      # Max epochs (used when mode="epoch")
+  max_steps: 150000                   # Max optimization steps (used when mode="steps")
+  grad_accum_steps: 1                 # Gradient accumulation steps (simulate larger batch size)
+                                      # Total effective batch = batch_size * grad_accum_steps * num_gpus
 
-  validation:
-    mode: "epoch" # "epoch" or "steps"
-    every_n_epochs: 1 # used if mode == "epoch"
-    every_n_steps: 2000 # used if mode == "steps"
+# ============================================
+# VALIDATION CONFIGURATION
+# ============================================
+# How often to run validation and checkpointing
+validation:
+  mode: "epoch"                       # Val mode: "epoch" or "steps"
+  every_n_epochs: 1                   # Validate every N epochs (when mode="epoch")
+  every_n_steps: 2000                 # Validate every N steps (when mode="steps")
 
-  logging:
-    log_every_steps: 50 # step = optimization step (so affected by batch size and grad accum)
+# ============================================
+# LOGGING CONFIGURATION
+# ============================================
+logging:
+  log_every_steps: 50                 # Log training metrics every N optimization steps
 
-  save_best: true # save best mIoU
-  save_last: true # always save last
+# ============================================
+# CHECKPOINT SAVINGS
+# ============================================
+save_best: true                       # Save checkpoint when validation metric improves (best_mIoU.pth)
+save_last: true                       # Always save last checkpoint when validation runs (last.pth)
 
+# ============================================
+# OPTIMIZER CONFIGURATION
+# ============================================
+# Optimizer type and hyperparameters
 optimizer:
-  type: "adamw"
-  lr: 1.0e-4 #base learning rate
+  type: "adamw"                       # Options: "adamw" | "adam" | "sgd"
+  lr: 1.0e-4                          # Base learning rate (important: scaled by batch_size sometimes)
+  
+  # AdamW specific parameters
+  weight_decay: 1.0e-2                # L2 regularization (AdamW decouples weight decay)
+  betas: [0.9, 0.999]                 # [beta1, beta2] - momentum coefficients
 
-  #adamw parameters
-  weight_decay: 1.0e-2 #default
-  betas: [0.9, 0.999] #default
-
+# ============================================
+# SCHEDULER CONFIGURATION
+# ============================================
+# Learning rate scheduling strategy
 scheduler:
-  type: "warmup_cosine" # "none" or "step", "cosine", "warmup_cosine", "poly"
+  type: "warmup_cosine"               # Options: "none" | "step" | "cosine" | "warmup_cosine" | "poly"
+                                      # "warmup_cosine": warmup then cosine decay (recommended)
+                                      # "cosine": cosine decay without warmup
+                                      # "step": step decay at fixed intervals
+                                      # "poly": polynomial decay
+                                      # "none": constant learning rate
+  
+  # For "step" scheduler (ignored otherwise):
+  step_size: 30                       # Decay learning rate every N epochs
+  gamma: 0.1                          # Decay factor (lr = lr * gamma)
+  
+  # For "warmup_cosine" and "cosine" scheduler:
+  warmup_steps: 1000                  # Warmup duration in OPTIMIZATION STEPS (not epochs)
+                                      # Linear warmup from 0 to base_lr
+  min_lr: 5.0e-6                      # Minimum learning rate at end of schedule
 
-  #for "step" scheduler
-  step_size: 30 # used if type == "step"
-  gamma: 0.1 # used if type == "step"
-
-  #for "warmup_cosine" scheduler and "cosine" scheduler
-  warmup_steps: 1000 # used if type == "warmup_cosine". Note: steps = OPTIMIZATION STEPS (batch_size * iterations)
-  min_lr: 5.0e-6 # used if type == "warmup_cosine"
-
+# ============================================
+# LOSS CONFIGURATION
+# ============================================
+# Loss function settings for lane detection
+# The LanesLoss combines BCEWithLogitsLoss + MultiScaleEdgeLoss per lane channel
+# Total loss = 2*left_loss + 2*right_loss + 1*other_loss
 loss:
+  downsample_factor: 4                # GT mask downsampling factor for loss computation
+                                      # Default calculated as: 4 / head_upsampling
+                                      # Match this to your output stride / upsampling setting
 
+# ============================================
+# NETWORK ARCHITECTURE CONFIGURATION
+# ============================================
+# Model architecture and component settings
 network:
-  model: "deeplabv3plus" #deeplabv3plus | fcn | unetplusplus
-  type: "custom" #standard uses the smp.deeplabv3plus architecture, custom uses my own integrated implementation (used for loading some weights customly)
-
-  #load a pretrained model to use as backbone (also as decoder if specified)
-  pretrained_model_path: #"/home/sergey/DEV/AI/AEI/runs/training/segmentation/dlv3plus_efficientnetb1_v2/checkpoints/best_mIoU.pth"     # path to a pretrained model to use as backbone (overrides 'pretrained' flag)
-
+  model: "deeplabv3plus"              # Architecture: "deeplabv3plus" | "fcn" | "unetplusplus"
+  type: "custom"                      # "standard": use SMP library implementation
+                                      # "custom": use local implementation (for custom weight loading)
+  
+  pretrained_model_path: ""           # Path to custom pretrained weights (optional)
+                                      # Empty = use ImageNet pretraining via 'pretrained' flag
+  
   backbone:
-    type: "efficientnet_b0" # e.g., "resnet50", "efficientnet_b0", etc.
-    pretrained: true # whether to use ImageNet pre-trained weights
-    encoder_depth: 5 #the encoder features that will be used in decoder (5 means the last stage before 1x1conv, 4 means the one before that, etc.)
-
-    encoder_partial_load: false # whether to partially load encoder weights from the pretrained model specified in pretrained_model_path
-    encoder_partial_depth: 4 # how many stages to load if encoder_partial_load is
-
-    output_stride: 16 # 8 or 16
-
-    #if pretrained model is used. Ignore the type and pretrained flags
-    load_encoder: false # whether to load encoder weights from the pretrained model specified in pretrained_model_path
-    freeze_encoder: false # whether to freeze backbone weights during training. It freezes until the encoder_partial_depth if encoder_partial_load is true
-
+    type: "efficientnet_b0"           # Backbone options: "resnet50", "resnet101", 
+                                      # "efficientnet_b0"-"efficientnet_b7", etc.
+    pretrained: true                  # Use ImageNet pre-trained backbone weights
+    encoder_depth: 5                  # Number of encoder feature stages to use (1-5)
+                                      # 5 = all stages (most features, more memory)
+                                      # 4 = skip final stage (less memory, some accuracy trade)
+    
+    encoder_partial_load: false       # Partially load encoder weights from pretrained_model_path
+    encoder_partial_depth: 4          # How many stages to load if partial loading
+    
+    output_stride: 16                 # Output stride: 8 or 16
+                                      # Lower = finer output, more memory, better small objects
+    
+    load_encoder: false               # Load encoder weights from pretrained_model_path
+    freeze_encoder: false             # Freeze backbone weights (train only decoder/head)
+  
   bottleneck:
-    #used to better map the backbone features to the decoder input
-    type: "none" # "none" | "fcn" | "fcn_cbam" | "fcn_skip" | "fcn_skip_cbam"
-    #number of channels is the same of the backbone output channels
-
+    type: "none"                      # Bottleneck module between encoder and decoder
+                                      # Options: "none" | "fcn" | "fcn_cbam" | "fcn_skip" | "fcn_skip_cbam"
+                                      # "fcn_cbam": FCN + CBAM attention (improves feature alignment)
+                                      # "fcn_skip": FCN + skip connections
+  
   decoder:
-    #for deeplabv3plus
-    aspp_dilations: [12, 24, 36] #dilation rates for ASPP module
-    deeplabv3plus_decoder_channels: 64 #number of channels in decoder
-
-    load_decoder: false # whether to load decoder weights from the pretrained model specified in backbone.pretrained_model_path
-    freeze_decoder: false # whether to freeze decoder weights during training
-
+    # ASPP (Atrous Spatial Pyramid Pooling) for DeepLabV3+
+    aspp_dilations: [12, 24, 36]      # Dilation rates for parallel atrous convolutions
+    deeplabv3plus_decoder_channels: 64  # Number of channels in decoder convolutions
+    
+    load_decoder: false               # Load decoder weights from pretrained_model_path
+    freeze_decoder: false             # Freeze decoder weights (train only head)
+  
   head:
-    head_activation: null
-    head_depth: 1
-    head_mid_channels: None
-    head_upsampling: 4
-    head_kernel_size: 3
-
-  output_channels: 3
+    # Final prediction head configuration
+    head_activation: null             # Activation after head (null = none, "sigmoid", "softmax")
+    head_depth: 1                     # Number of conv layers in head
+    head_mid_channels: null           # Intermediate channels (null = auto)
+    head_upsampling: 4                # Upsampling factor for final output
+                                      # Must match expected output resolution
+    head_kernel_size: 3               # Kernel size for head convolutions
+  
+  output_channels: 3                  # Number of output channels (class count)
+                                      # 3 for EgoLanes: [left_lane, right_lane, other]
+                                      # For standard segmentation: number of classes + 1 (background)
