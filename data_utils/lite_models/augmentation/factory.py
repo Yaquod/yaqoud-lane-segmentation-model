@@ -1,0 +1,18 @@
+# dataloader/augmentations/factory.py
+
+from data_utils.lite_models.augmentation.segmentation import SegmentationAugmentation
+from data_utils.lite_models.augmentation.depth import DepthAugmentation
+from data_utils.lite_models.augmentation.lanes import LanesAugmentation
+
+
+def build_aug(data_type: str, cfg: dict, mode: str, pseudo_labeling: bool = False):
+    data_type = data_type.upper()
+
+    if data_type == "SEGMENTATION":
+        return SegmentationAugmentation(mode, cfg)
+    elif data_type == "DEPTH":
+        return DepthAugmentation(mode, cfg, pseudo_labeling=pseudo_labeling)
+    elif data_type == "LANE_DETECTION":
+        return LanesAugmentation(mode, cfg)
+    else:
+        raise ValueError(f"Unsupported data_type: {data_type}")
