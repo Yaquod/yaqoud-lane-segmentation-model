@@ -122,6 +122,7 @@ def run_one_image(
     std,
     threshold: float,
     alpha: float,
+    save_images: bool = True,
 ):
     image_bgr = cv2.imread(str(image_path), cv2.IMREAD_COLOR)
     if image_bgr is None:
@@ -144,17 +145,17 @@ def run_one_image(
     raw_mask = pred.astype(np.uint8) * 255
     colored = colorize_mask(pred)
     overlay_rgb = cv2.addWeighted(colored, alpha, image_rgb, 1.0 - alpha, 0.0)
-
-    mask_dir = out_dir / "masks"
-    overlay_dir = out_dir / "overlays"
-    mask_dir.mkdir(parents=True, exist_ok=True)
-    overlay_dir.mkdir(parents=True, exist_ok=True)
-
-    stem = image_path.stem
-    Image.fromarray(raw_mask, mode="RGB").save(mask_dir / f"{stem}.png")
-
     overlay_bgr = cv2.cvtColor(overlay_rgb, cv2.COLOR_RGB2BGR)
-    cv2.imwrite(str(overlay_dir / f"{stem}.png"), overlay_bgr)
+
+    if save_images:
+        mask_dir = out_dir / "masks"
+        overlay_dir = out_dir / "overlays"
+        mask_dir.mkdir(parents=True, exist_ok=True)
+        overlay_dir.mkdir(parents=True, exist_ok=True)
+
+        stem = image_path.stem
+        Image.fromarray(raw_mask, mode="RGB").save(mask_dir / f"{stem}.png")
+        cv2.imwrite(str(overlay_dir / f"{stem}.png"), overlay_bgr)
 
     return overlay_bgr
 
@@ -213,6 +214,7 @@ def main():
             std=norm_cfg.get("std", [0.229, 0.224, 0.225]),
             threshold=args.threshold,
             alpha=args.alpha,
+            save_images=not args.video,
         )
 
         if args.video:
