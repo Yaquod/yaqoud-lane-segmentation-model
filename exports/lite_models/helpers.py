@@ -14,8 +14,6 @@ def ensure(path, name):
         fatal(f"{name} not found: {path}")
 
 
-
-
 # ============================================================
 # EGO LANES DEFAULT SETTINGS
 # ============================================================
@@ -23,16 +21,15 @@ def ensure(path, name):
 DATASET_ROOT = Path("/home/sergey/DEV/AI/datasets")
 
 EGOLANESLITE_DEFAULT_CONFIG = {
-
     "experiment": {
         "name": "val",
         "wandb": {"enabled": False},
         "seed": 42,
     },
-
     "dataset": {
         "tusimple_root": str(DATASET_ROOT / "TUSimple"),
         "curvelanes_root": str(DATASET_ROOT / "Curvelanes"),
+        "carla_root": "dataset/CarlaEgoLanes/processed",
         "training_sets": [],
         "validation_sets": [],
         "augmentations": {
@@ -50,12 +47,10 @@ EGOLANESLITE_DEFAULT_CONFIG = {
             },
         },
     },
-
     "dataloader": {
         "batch_size_val": 1,
         "num_workers": 2,
     },
-
     "network": {
         "model": "deeplabv3plus",
         "type": "custom",
@@ -80,7 +75,6 @@ EGOLANESLITE_DEFAULT_CONFIG = {
             "head_kernel_size": 3,
         },
     },
-
     "checkpoint": {
         "load_from": None,
         "strict_load": True,
@@ -88,17 +82,14 @@ EGOLANESLITE_DEFAULT_CONFIG = {
 }
 
 
-
 SCENESEGLITE_DEFAULT_CONFIG = {
-
     "experiment": {
         "name": "val",
         "wandb": {"enabled": False},
         "seed": 42,
     },
-
     "dataset": {
-        "acdc_root":  str(DATASET_ROOT / "acdc"),
+        "acdc_root": str(DATASET_ROOT / "acdc"),
         "mapillary_root": str(DATASET_ROOT / "mapillary"),
         "muses_root": str(DATASET_ROOT / "MUSES"),
         "bdd100k_root": str(DATASET_ROOT / "BDD100K"),
@@ -123,7 +114,6 @@ SCENESEGLITE_DEFAULT_CONFIG = {
     "loss": {
         "type": "cross_entropy",
         "ignore_index": 255,
-
         "num_classes": 19,
         "class_names": {
             0: "road",
@@ -147,12 +137,10 @@ SCENESEGLITE_DEFAULT_CONFIG = {
             18: "bicycle",
         },
     },
-
     "dataloader": {
         "batch_size_val": 1,
         "num_workers": 2,
     },
-
     "network": {
         "model": "deeplabv3plus",
         "type": "custom",
@@ -177,7 +165,6 @@ SCENESEGLITE_DEFAULT_CONFIG = {
             "head_kernel_size": 1,
         },
     },
-
     "checkpoint": {
         "load_from": None,
         "strict_load": True,
@@ -186,16 +173,14 @@ SCENESEGLITE_DEFAULT_CONFIG = {
 
 
 SCENE3DLITE_DEFAULT_CONFIG = {
-
     "experiment": {
         "name": "val",
         "wandb": {"enabled": False},
         "seed": 42,
     },
-
     "dataset": {
         "pseudo_labeling": True,
-        "acdc_root":  str(DATASET_ROOT / "acdc"),
+        "acdc_root": str(DATASET_ROOT / "acdc"),
         "mapillary_root": str(DATASET_ROOT / "mapillary"),
         "muses_root": str(DATASET_ROOT / "MUSES"),
         "bdd100k_root": str(DATASET_ROOT / "BDD100K"),
@@ -217,13 +202,10 @@ SCENE3DLITE_DEFAULT_CONFIG = {
             },
         },
     },
-
-    
     "dataloader": {
         "batch_size_val": 1,
         "num_workers": 2,
     },
-
     "network": {
         "model": "deeplabv3plus",
         "type": "custom",
@@ -248,14 +230,9 @@ SCENE3DLITE_DEFAULT_CONFIG = {
             "head_kernel_size": 3,
         },
     },
-
     "checkpoint": {
         "load_from": None,
         "strict_load": True,
     },
-
-    "training": {
-        "pseudo_labeler_generator" : "vitl"
-    },
-
+    "training": {"pseudo_labeler_generator": "vitl"},
 }
