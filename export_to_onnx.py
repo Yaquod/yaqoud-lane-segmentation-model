@@ -68,12 +68,37 @@ def main():
     with open(args.config, "r") as f:
         cfg = yaml.safe_load(f)
 
-    # Allow overriding width/height if it's in the config's rescaling
+    # Allow overriding width/height if it's in the config
     try:
-        args.height = cfg["dataset"]["augmentations"]["rescaling"][0]
-        args.width = cfg["dataset"]["augmentations"]["rescaling"][1]
-        print(f"Using dimensions from config: {args.height}x{args.width}")
-    except KeyError:
+        # First try to find it under rescaling (like in infer yaml)
+        rescaling = cfg.get("dataset", {}).get("augmentations", {}).get("rescaling", {})
+        if isinstance(rescaling, list):
+            args.height, args.width = rescaling[0], rescaling[1]
+            print(f"Using dimensions from config (list): {args.height}x{args.width}")
+        elif (
+            isinstance(rescaling, dict)
+            and "height" in rescaling
+            and "width" in rescaling
+        ):
+            args.height, args.width = rescaling["height"], rescaling["width"]
+            print(
+                f"Using dimensions from config (rescaling dict): {args.height}x{args.width}"
+            )
+        else:
+            # If not in rescaling, it might be directly directly under augmentations (like in train yaml)
+            augmentations = cfg.get("dataset", {}).get("augmentations", {})
+            if "height" in augmentations and "width" in augmentations:
+                args.height, args.width = (
+                    augmentations["height"],
+                    augmentations["width"],
+                )
+                print(
+                    f"Using dimensions from config (augmentations dict): {args.height}x{args.width}"
+                )
+    except Exception as e:
+        print(
+            f"Could not parse dimensions from config: {e}. Using defaults {args.height}x{args.width}"
+        )
         pass
 
     model = build_model(cfg, device)
