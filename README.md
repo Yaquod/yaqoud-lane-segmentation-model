@@ -1,6 +1,6 @@
 # EgoLanesLite Project Guide
 
-This repository trains, fine-tunes, evaluates, and runs inference for an EgoLanesLite lane segmentation model. The lite model is configured as a 3-channel lane mask predictor:
+This repository trains, fine-tunes, evaluates, and runs inference for an EgoLanesLite lane segmentation model. It also includes a separate inference script for the older non-lite `EgoLanesNetwork`. The lite model is configured as a 3-channel lane mask predictor:
 
 - channel 0: ego-left lane
 - channel 1: ego-right lane
@@ -46,12 +46,12 @@ Use a CUDA runtime if training on GPU.
 
 ## Dataset Formats
 
-### Carla/EgoLanesLite Processed Format
+### Processed EgoLanesLite Format
 
-The preferred format for this repo is:
+The lane dataloaders in this repo expect this processed structure:
 
 ```text
-dataset/CarlaEgoLanes/processed/
+<dataset_root>/processed/
   image/
     sample_000001.jpg
   mask/
@@ -61,13 +61,13 @@ dataset/CarlaEgoLanes/processed/
 Rules:
 
 - Every image must have a mask with the same basename.
-- Images may be `.jpg`, `.jpeg`, or `.png`.
+- The Carla loader accepts `.jpg`, `.jpeg`, and `.png`; the TuSimple and CurveLanes loaders currently collect `.jpg`.
 - Masks must be 3-channel PNGs.
 - Mask shape must be `H x W x 3`.
 - Mask values must be binary: `0` or `255`.
 - Channels are RGB order: ego-left, ego-right, other.
 
-The Carla config points here by default:
+For Carla-style converted data, the relevant dataset config keys are:
 
 ```yaml
 dataset:
@@ -75,6 +75,8 @@ dataset:
   validation_sets: ["carla"]
   carla_root: "dataset/CarlaEgoLanes/processed"
 ```
+
+`EgoLanesLite_train.yaml` is the training config. Its current dataset roots are `tusimple_root` and `curvelanes_root`, so change those paths if your processed training data lives somewhere else. `EgoLanesLite_infer.yaml` may still contain dataset keys for compatibility, but checkpoint inference only reads the network and preprocessing settings from it.
 
 ### Current TuLaneConverted Format
 
@@ -226,7 +228,7 @@ python inference/ego_lanes_infer.py \
 
 The non-lite script defaults to the original `EgoLanesNetwork` preprocessing size, `640x320`, with ImageNet RGB normalization. You can pass `--config some_config.yaml` if you want it to read `dataset.augmentations.rescaling` and `dataset.augmentations.normalize` from a YAML file.
 
-Outputs:
+Without `--video`, inference writes:
 
 ```text
 runs/inference/<run_name>/
@@ -244,7 +246,7 @@ Useful options:
 --fps 30
 ```
 
-To create a video from all the predicted overlays, add the `--video` flag. This will save a smooth MP4 file, `output_overlay.mp4`, generated at the specified `--fps` (default 30) directly in the output directory.
+To create a video from all the predicted overlays, add the `--video` flag. This saves `output_overlay.mp4`, generated at the specified `--fps` (default 30), directly in the output directory. In video mode the scripts do not save the per-image `masks/` and `overlays/` folders.
 
 For `ego_lanes_lite_infer.py`, the script builds the model architecture from the YAML config, so the config must match the checkpoint architecture. For `ego_lanes_infer.py`, the architecture is the fixed non-lite `EgoLanesNetwork`, so the checkpoint must come from that model.
 
@@ -255,7 +257,7 @@ Evaluation script:
 ```bash
 python exports/lite_models/eval_egolaneslite.py \
   --checkpoint checkpoint.pth \
-  --datasets carla \
+  --datasets tusimple curvelanes \
   --backbone efficientnet_b0 \
   --height 400 \
   --width 800 \
@@ -276,11 +278,11 @@ This reports:
 
 It also saves visual validation samples into `--out_dir`.
 
-Note: the eval helper has its own default config. Make sure command-line architecture settings match the checkpoint. For Carla support, the default eval config may also need `carla_root` support if not already present in the branch you run.
+Note: the eval helper has its own default config and dataset roots in `exports/lite_models/helpers.py`. Make sure those roots and the command-line architecture settings match the checkpoint. Although the dataloader factory supports `carla`, the eval helper does not currently expose a CLI argument for `carla_root`; add that root to its default config before evaluating with `--datasets carla`.
 
 ## Check Dataset Health
 
-Useful checks:
+Useful checks for a processed dataset root such as `dataset/CarlaEgoLanes/processed`:
 
 ```bash
 find dataset/CarlaEgoLanes/processed/image -maxdepth 1 -type f | wc -l
@@ -348,10 +350,10 @@ experiment:
 ## Recommended Workflow
 
 1. Install requirements in the cloud environment.
-2. Convert or prepare the dataset in `dataset/CarlaEgoLanes/processed`.
+2. Convert or prepare the dataset in the processed `image/` and `mask/` layout.
 3. Run a small conversion with previews and visually check labels.
 4. Run checkpoint inference on a few images to see baseline behavior.
-5. Fine-tune using `EgoLanesLite_train.yaml`.
+5. Train or fine-tune using `EgoLanesLite_train.yaml`.
 6. Monitor validation mIoU and saved visualizations.
 7. Resume from `last.pth` if interrupted.
 8. Use `best.pth` for final inference/evaluation.
