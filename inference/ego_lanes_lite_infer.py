@@ -9,6 +9,7 @@ import numpy as np
 import torch
 import yaml
 from PIL import Image
+from tqdm import tqdm
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -200,7 +201,7 @@ def main():
         out_dir.mkdir(parents=True, exist_ok=True)
         video_path = out_dir / "output_overlay.mp4"
 
-    for image_path in images:
+    for image_path in tqdm(images, desc="Running Inference"):
         overlay_bgr = run_one_image(
             model=model,
             image_path=image_path,
