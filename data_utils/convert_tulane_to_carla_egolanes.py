@@ -9,7 +9,7 @@ import numpy as np
 from tqdm import tqdm
 
 
-DEFAULT_SPLITS = ["train", "val", "target_train", "target_val", "target_test"]
+DEFAULT_SPLITS = ["train", "val"]
 
 
 def collect_samples(root: Path, splits: list[str]) -> list[tuple[str, Path, Path]]:
