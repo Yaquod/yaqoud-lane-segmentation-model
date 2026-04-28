@@ -8,6 +8,22 @@ This repository trains, fine-tunes, evaluates, and runs inference for an EgoLane
 
 Masks must be binary PNGs with values `0` or `255` in each channel.
 
+## Table of Contents
+
+- [Project Layout](#project-layout)
+- [Environment Setup](#environment-setup)
+- [Dataset Formats](#dataset-formats)
+- [Convert TuLaneConverted To 3-Channel Format](#convert-tulaneconverted-to-3-channel-format)
+- [Train From Scratch](#train-from-scratch)
+- [Fine-Tune With The Training Config](#fine-tune-with-the-training-config)
+- [Resume Training](#resume-training)
+- [Checkpoint Inference On Images](#checkpoint-inference-on-images)
+- [Evaluate A Checkpoint](#evaluate-a-checkpoint)
+- [Exporting `EgoLanesLite` to ONNX](#exporting-egolaneslite-to-onnx)
+- [Check Dataset Health](#check-dataset-health)
+- [Common Problems](#common-problems)
+- [Recommended Workflow](#recommended-workflow)
+
 ## Project Layout
 
 ```text
@@ -346,6 +362,38 @@ experiment:
   wandb:
     enabled: false
 ```
+
+## Exporting `EgoLanesLite` to ONNX
+
+To deploy the PyTorch model (`.pth`) to production platforms like TensorRT, OpenVINO, or ONNX Runtime, you can use the provided script to export it to `.onnx`.
+
+### 1. Install ONNX Dependencies
+
+Ensure you have `onnx` and `onnxruntime` installed in your environment:
+
+```bash
+pip install onnx onnxruntime
+```
+
+### 2. Run the Export
+
+Execute the script `export_to_onnx.py` to generate your ONNX model. By default, it uses `EgoLanesLite_infer.yaml` and `checkpoint.pth`.
+
+```bash
+python export_to_onnx.py
+```
+
+You can optionally override inputs on the command line:
+
+```bash
+python export_to_onnx.py \
+  --config EgoLanesLite_infer.yaml \
+  --checkpoint checkpoint.pth \
+  --output my_model_weights.onnx \
+  --width 800 --height 400
+```
+
+This script will read the necessary input dimensions from the config, rebuild the network, load the states, test the inference, dynamically determine output axes sizes, export to ONNX, and then finally run `onnx.checker` against the built structure to validate it. The output will be `EgoLanesLite.onnx` (or the configured `--output` name), ready for deployment.
 
 ## Recommended Workflow
 
