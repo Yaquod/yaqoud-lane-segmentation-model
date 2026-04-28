@@ -19,9 +19,9 @@ from model_components.lite_models.DeepLabv3Plus import DeepLabV3Plus
 
 LANE_COLORS_RGB = np.array(
     [
-        [0, 255, 255],    # ego-left: cyan
-        [255, 0, 200],    # ego-right: magenta
-        [0, 255, 145],    # other: green
+        [255, 0, 0],      # ego-left (channel 0): red
+        [0, 255, 0],      # ego-right (channel 1): green
+        [0, 0, 255],      # other (channel 2): blue
     ],
     dtype=np.uint8,
 )
