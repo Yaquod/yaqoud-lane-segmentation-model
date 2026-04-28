@@ -1,5 +1,15 @@
 import argparse
+from pathlib import Path
+import sys
+
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 from data_utils.lite_models.helpers.training import load_yaml, set_global_seed
+
+
 from training.ego_lanes_lite_trainer import EgoLanesLiteTrainer
 
 

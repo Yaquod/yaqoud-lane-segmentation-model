@@ -8,22 +8,14 @@ experiment:
     project_name: "EgoLanesLite" #it is fixed from the account
 
 checkpoint:
-  load_from: # path to checkpoint to load before training
+  load_from: EgoLanes_Lite.pth
   strict_load: true # whether to strictly enforce that the keys in state_dict match the keys returned by the model's state_dict function
   fine_tune: false # true loads model weights only and resets optimizer/scheduler/counters
 
 dataset:
-  training_sets: ["tusimple", "curvelanes"] # <--- LIST OF DATASETS TO USE FOR TRAIN
-  acdc_root: "/home/sergey/DEV/AI/datasets/acdc"
-  mapillary_root: "/home/sergey/DEV/AI/datasets/mapillary"
-  muses_root: "/home/sergey/DEV/AI/datasets/MUSES"
-  idda_root: "/home/sergey/DEV/AI/datasets/idda"
-  bdd100k_root: "/home/sergey/DEV/AI/datasets/BDD100K"
-  cityscapes_root: "/home/sergey/DEV/AI/datasets/cityscapes"
-  tusimple_root: "/media/mhmdkardosha/01DCA4B18C162360/Graduation Project/Last-Hope/dataset/TuLaneConverted/processed"
-  curvelanes_root: "/media/mhmdkardosha/01DCA4B18C162360/Graduation Project/Last-Hope/dataset/TuLaneConverted/processed"
-
-  validation_sets: ["tusimple", "curvelanes"] # <--- LIST OF DATASETS TO USE FOR VALIDATION
+  training_sets: ["carla"]
+  validation_sets: ["carla"]
+  carla_root: "dataset/CarlaEgoLanes/processed"
 
   #augmentations settings for all datasets
   augmentations:
@@ -57,7 +49,7 @@ dataset:
       prob: 0.5 # probability noise is applied
 
 dataloader:
-  batch_size: 8 # how many samples per optimization step
+  batch_size: 16 # how many samples per optimization step
   num_workers: 8 # how many workers for data loading
   pin_memory: true # pin memory for dataloader
   persistent_workers: true # keep workers alive between epochs
@@ -67,13 +59,13 @@ dataloader:
   shuffle_val: false # do not shuffle validation data
 
 training:
-  mode: "steps" # "epoch" or "steps"
-  max_epochs: 40 # used if mode == "epoch"
+  mode: "epoch" # "epoch" or "steps"
+  max_epochs: 30 # used if mode == "epoch"
   max_steps: 150000 # used if mode == "steps". step = optimization step (so affected by batch size and grad accum)
   grad_accum_steps: 1
 
   validation:
-    mode: "steps" # "epoch" or "steps"
+    mode: "epoch" # "epoch" or "steps"
     every_n_epochs: 1 # used if mode == "epoch"
     every_n_steps: 2000 # used if mode == "steps"
 
