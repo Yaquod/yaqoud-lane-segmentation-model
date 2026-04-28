@@ -40,6 +40,10 @@ dataset/
 *.h5
 *.hdf5
 *.parquet
+*.mp4
+*.png
+*.jpg
+*.jpeg
 
 # Config (if containing secrets)
 # .env
