@@ -63,9 +63,14 @@ class LiteTrainerBase(ABC):
         if network_model == "deeplabv3plus":
             self.model = DeepLabV3Plus(
                 encoder_name=self.backbone_cfg["type"],
+                encoder_weights=(
+                    "imagenet" if self.backbone_cfg.get("pretrained", True) else None
+                ),
                 segmentation_ckpt=self.network_cfg.get("pretrained_model_path", None),
                 encoder_output_stride=self.backbone_cfg.get("output_stride", 16),
-                aspp_dilations=self.decoder_cfg.get("aspp_dilations", [12, 24, 36]),
+                decoder_atrous_rates=self.decoder_cfg.get(
+                    "aspp_dilations", [12, 24, 36]
+                ),
                 decoder_channels=self.decoder_cfg.get(
                     "deeplabv3plus_decoder_channels", 256
                 ),
@@ -269,6 +274,7 @@ class LiteTrainerBase(ABC):
         self.samples_seen = 0  # you use samples_seen as the “step” in W&B
         self.global_step = 0  # optimizer updates count
         self.best_val_loss = float("inf")
+        self.best_metric = float("-inf")
 
         self.batch_size = int(self.dl_cfg.get("batch_size", 1))
         self.effective_batch = self.batch_size * self.grad_accum_steps
@@ -383,7 +389,7 @@ class LiteTrainerBase(ABC):
                 self.scheduler.load_state_dict(ckpt["scheduler_state"])
 
             if "best" in ckpt:
-                self.best = float(ckpt["best"])
+                self.best_metric = float(ckpt["best"])
 
             if "epoch" in ckpt:
                 self.epoch = int(ckpt["epoch"])
@@ -454,7 +460,7 @@ class LiteTrainerBase(ABC):
             "model_state": self.model.state_dict(),
             "optimizer_state": self.optimizer.state_dict(),
             "scheduler_state": self.scheduler.state_dict() if self.scheduler else None,
-            "best": self.best_val_loss,
+            "best": self.best_metric,
             "wandb_run_id": self.wb.run.id if self.wb else None,
         }
 

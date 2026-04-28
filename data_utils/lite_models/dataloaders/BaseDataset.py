@@ -62,6 +62,12 @@ class BaseDataset(Dataset):
                 label = np.load(gt_path)
             elif self.data_type == "LANE_DETECTION":
                 label = cv2.imread(gt_path, cv2.IMREAD_UNCHANGED)
+                if label is None:
+                    raise FileNotFoundError(f"[BaseDataset] Missing GT mask: {gt_path}")
+                if label.ndim == 3 and label.shape[2] == 4:
+                    label = cv2.cvtColor(label, cv2.COLOR_BGRA2RGB)
+                elif label.ndim == 3 and label.shape[2] == 3:
+                    label = cv2.cvtColor(label, cv2.COLOR_BGR2RGB)
             else:
                 raise ValueError(
                     f"[BaseDataset] ERROR: unsupported data_type: {self.data_type}"
@@ -87,6 +93,12 @@ class BaseDataset(Dataset):
 
         if self.data_type == "LANE_DETECTION":
             # lane detection specific behaviour: normalize to [0,1] float32
+            if label.ndim != 3 or label.shape[2] != 3:
+                raise ValueError(
+                    "[BaseDataset] LANE_DETECTION masks must be 3-channel PNGs "
+                    f"with shape [H,W,3]. Got shape {label.shape} for {gt_path}"
+                )
+
             label = label.astype(np.float32) / 255.0
 
             # CHW for BCE

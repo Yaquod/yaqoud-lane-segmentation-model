@@ -1,0 +1,117 @@
+experiment:
+  name: "EgoLanesLite_Carla"
+  output_dir: "runs/training/EgoLanesLite/"
+  seed: 42
+  device: "cuda"
+  wandb:
+    enabled: false
+    project_name: "EgoLanesLite"
+
+checkpoint:
+  load_from: "checkpoint.pth"
+  strict_load: true
+  fine_tune: true
+
+dataset:
+  training_sets: ["carla"]
+  validation_sets: ["carla"]
+  carla_root: "dataset/CarlaEgoLanes/processed"
+
+  augmentations:
+    normalize:
+      enabled: true
+      mean: [0.485, 0.456, 0.406]
+      std: [0.229, 0.224, 0.225]
+
+    rescaling:
+      enabled: true
+      mode: "fixed_resize"
+      scale_range: [1.0, 1.0]
+      width: 800
+      height: 400
+
+    flip_prob: 0.5
+
+    random_grid_shuffle:
+      enabled: false
+      grid: [1, 2]
+      prob: 0.25
+
+    noise:
+      profile: "none"
+      prob: 0.5
+
+dataloader:
+  batch_size: 8
+  num_workers: 8
+  pin_memory: true
+  persistent_workers: true
+  drop_last: true
+  prefetch_factor: 2
+  shuffle_train: true
+  shuffle_val: false
+
+training:
+  mode: "steps"
+  max_epochs: 40
+  max_steps: 150000
+  grad_accum_steps: 1
+
+  validation:
+    mode: "steps"
+    every_n_epochs: 1
+    every_n_steps: 2000
+
+  logging:
+    log_every_steps: 50
+
+  save_best: true
+  save_last: true
+
+optimizer:
+  type: "adamw"
+  lr: 1.0e-4
+  weight_decay: 1.0e-2
+  betas: [0.9, 0.999]
+
+scheduler:
+  type: "warmup_cosine"
+  step_size: 30
+  gamma: 0.1
+  warmup_steps: 1000
+  min_lr: 5.0e-6
+
+loss:
+
+network:
+  model: "deeplabv3plus"
+  type: "custom"
+  pretrained_model_path:
+
+  backbone:
+    type: "efficientnet_b0"
+    pretrained: false
+    encoder_depth: 5
+    encoder_partial_load: false
+    encoder_partial_depth: 4
+    output_stride: 16
+    load_encoder: false
+    freeze_encoder: false
+
+  bottleneck:
+    type: "none"
+
+  decoder:
+    aspp_dilations: [12, 24, 36]
+    deeplabv3plus_decoder_channels: 64
+    load_decoder: false
+    freeze_decoder: false
+
+  head:
+    head_activation:
+    head_depth: 1
+    head_mid_channels:
+    head_upsampling: 4
+    head_kernel_size: 3
+
+  output_channels: 3

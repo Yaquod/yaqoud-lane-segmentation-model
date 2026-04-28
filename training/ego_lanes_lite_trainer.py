@@ -50,10 +50,10 @@ class EgoLanesLiteTrainer(LiteTrainerBase):
         # build training state (counters, best metrics, etc)
         self._build_training_state()  # in trainer base
 
+        self._build_loss()  # specific to this trainer since we have a custom loss and val function
+
         # resume in case the checkpoint path is specified
         self._maybe_resume()  # in trainer base
-
-        self._build_loss()  # specific to this trainer since we have a custom loss and val function
 
     def _build_loss(self):
 

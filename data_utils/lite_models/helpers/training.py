@@ -6,15 +6,9 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 
-from data_utils.lite_models.dataloaders.ACDCDataset import ACDCDataset
-from data_utils.lite_models.dataloaders.MapillaryDataset import MapillaryDataset
-from data_utils.lite_models.dataloaders.MUSESDataset import MUSESDataset
-from data_utils.lite_models.dataloaders.IDDADataset import IDDADataset
-from data_utils.lite_models.dataloaders.BDD100KDataset import BDD100KDataset
-from data_utils.lite_models.dataloaders.CityscapesDataset import CityscapesDataset
+from data_utils.lite_models.dataloaders.CarlaDataset import CarlaDataset
 from data_utils.lite_models.dataloaders.CurveLanesDataset import CurveLanesDataset
 from data_utils.lite_models.dataloaders.TUSimpleDataset import TUSimpleDataset
-from data_utils.lite_models.dataloaders.IDDADataset import IDDADataset
 
 
 def load_yaml(path: str):
@@ -99,6 +93,8 @@ def build_single_dataset(
         )
 
     if name == "acdc":
+        from data_utils.lite_models.dataloaders.ACDCDataset import ACDCDataset
+
         return ACDCDataset(
             dataset_root,
             aug_cfg=aug_cfg,
@@ -108,6 +104,8 @@ def build_single_dataset(
         )
 
     elif name == "mapillary":
+        from data_utils.lite_models.dataloaders.MapillaryDataset import MapillaryDataset
+
         return MapillaryDataset(
             dataset_root,
             aug_cfg=aug_cfg,
@@ -117,6 +115,8 @@ def build_single_dataset(
         )
 
     elif name == "muses":
+        from data_utils.lite_models.dataloaders.MUSESDataset import MUSESDataset
+
         return MUSESDataset(
             dataset_root,
             aug_cfg=aug_cfg,
@@ -126,6 +126,8 @@ def build_single_dataset(
         )
 
     elif name == "idda" or name == "iddav2":
+        from data_utils.lite_models.dataloaders.IDDADataset import IDDADataset
+
         return IDDADataset(
             dataset_root,
             aug_cfg=aug_cfg,
@@ -144,6 +146,8 @@ def build_single_dataset(
         )
 
     elif name == "bdd100k":
+        from data_utils.lite_models.dataloaders.BDD100KDataset import BDD100KDataset
+
         return BDD100KDataset(
             dataset_root,
             aug_cfg=aug_cfg,
@@ -153,6 +157,8 @@ def build_single_dataset(
         )
 
     elif name == "cityscapes":
+        from data_utils.lite_models.dataloaders.CityscapesDataset import CityscapesDataset
+
         return CityscapesDataset(
             dataset_root,
             aug_cfg=aug_cfg,
