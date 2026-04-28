@@ -266,14 +266,14 @@ To create a video from all the predicted overlays, add the `--video` flag. This 
 
 For `ego_lanes_lite_infer.py`, the script builds the model architecture from the YAML config, so the config must match the checkpoint architecture. For `ego_lanes_infer.py`, the architecture is the fixed non-lite `EgoLanesNetwork`, so the checkpoint must come from that model.
 
-## Evaluate A Checkpoint
+## Evaluate A Checkpoint OR ONNX Model
 
-Evaluation script:
+Evaluation script for `.pth` checkpoints:
 
 ```bash
 python exports/lite_models/eval_egolaneslite.py \
   --checkpoint checkpoint.pth \
-  --datasets tusimple curvelanes \
+  --datasets carla \
   --backbone efficientnet_b0 \
   --height 400 \
   --width 800 \
@@ -282,6 +282,20 @@ python exports/lite_models/eval_egolaneslite.py \
   --batch-size 1 \
   --device cuda \
   --out_dir runs/eval/egolanes_lite_eval \
+  --viz 10
+```
+
+Evaluation script for exported `.onnx` models:
+
+```bash
+python exports/lite_models/eval_egolaneslite.py \
+  --onnx EgoLanesLite.onnx \
+  --datasets carla \
+  --height 400 \
+  --width 800 \
+  --batch-size 1 \
+  --device cuda \
+  --out_dir runs/eval/egolanes_lite_onnx_eval \
   --viz 10
 ```
 
