@@ -21,6 +21,7 @@ Masks must be binary PNGs with values `0` or `255` in each channel.
 │       ├── dataloaders/
 │       └── helpers/
 ├── exports/lite_models/eval_egolaneslite.py
+├── inference/ego_lanes_infer.py
 ├── inference/ego_lanes_lite_infer.py
 ├── model_components/
 ├── training/train_ego_lanes_lite.py
@@ -204,7 +205,7 @@ Use resume when continuing the same training run, not when adapting to a new dat
 
 ## Checkpoint Inference On Images
 
-Use the lite-specific inference script:
+Use the lite-specific inference script for checkpoints trained with the configurable `EgoLanesLite` architecture:
 
 ```bash
 python inference/ego_lanes_lite_infer.py \
@@ -214,10 +215,21 @@ python inference/ego_lanes_lite_infer.py \
   --output runs/inference/egolanes_lite
 ```
 
+Use the non-lite inference script for checkpoints trained with `model_components.EgoLanesNetwork`:
+
+```bash
+python inference/ego_lanes_infer.py \
+  --checkpoint checkpoint.pth \
+  --input path/to/images_or_single_image \
+  --output runs/inference/egolanes
+```
+
+The non-lite script defaults to the original `EgoLanesNetwork` preprocessing size, `640x320`, with ImageNet RGB normalization. You can pass `--config some_config.yaml` if you want it to read `dataset.augmentations.rescaling` and `dataset.augmentations.normalize` from a YAML file.
+
 Outputs:
 
 ```text
-runs/inference/egolanes_lite/
+runs/inference/<run_name>/
   masks/       # raw 3-channel binary predicted masks
   overlays/    # colored overlays on the original images
 ```
@@ -234,7 +246,7 @@ Useful options:
 
 To create a video from all the predicted overlays, add the `--video` flag. This will save a smooth MP4 file, `output_overlay.mp4`, generated at the specified `--fps` (default 30) directly in the output directory.
 
-The inference script uses the model architecture from the YAML config, so the config must match the checkpoint architecture.
+For `ego_lanes_lite_infer.py`, the script builds the model architecture from the YAML config, so the config must match the checkpoint architecture. For `ego_lanes_infer.py`, the architecture is the fixed non-lite `EgoLanesNetwork`, so the checkpoint must come from that model.
 
 ## Evaluate A Checkpoint
 
