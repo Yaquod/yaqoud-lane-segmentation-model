@@ -435,3 +435,44 @@ Verify converted masks:
 python data_utils/verify_carla_egolanes.py \
   --data-root dataset/CarlaEgoLanes/processed
 ```
+
+---
+
+## 12) ROS2 ONNX node (AWSIM / desktop simulation)
+
+This repo now includes a ROS2 node:
+
+- `inference/egolanes_lite_ros2_node.py`
+
+It runs an EgoLanesLite ONNX model with ONNX Runtime, subscribes to an RGB camera topic, and publishes a `mono8` lane mask image.
+
+Published mask semantics:
+
+- `0` = background
+- `1` = ego-left lane
+- `2` = ego-right lane
+- `3` = other lane
+
+Run example:
+
+```bash
+python inference/egolanes_lite_ros2_node.py \
+  --ros-args \
+  -p model_path:=EgoLanesLite_best.onnx \
+  -p image_topic:=/sensing/camera/traffic_light/image_raw \
+  -p mask_topic:=/perception/lane_detection/mask \
+  -p input_h:=400 \
+  -p input_w:=800 \
+  -p threshold:=0.0 \
+  -p use_cuda:=true
+```
+
+Node parameters:
+
+- `model_path` (string): ONNX model path
+- `image_topic` (string): input `sensor_msgs/Image` topic
+- `mask_topic` (string): output `sensor_msgs/Image` topic
+- `input_h`, `input_w` (int): model input size used for resize
+- `mean`, `std` (float array): normalization values
+- `threshold` (float): logit threshold for lane activation
+- `use_cuda` (bool): try `CUDAExecutionProvider` before CPU
