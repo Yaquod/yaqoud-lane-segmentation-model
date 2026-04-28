@@ -221,16 +221,24 @@ Resume mode loads:
 
 Use resume when continuing the same training run, not when adapting to a new dataset.
 
-## Checkpoint Inference On Images
+## Checkpoint Inference On Images OR ONNX
 
-Use the lite-specific inference script for checkpoints trained with the configurable `EgoLanesLite` architecture:
+Use the lite-specific inference script for checkpoints trained with the configurable `EgoLanesLite` architecture or exported `.onnx` models:
 
 ```bash
+# For a standard checkpoint (.pth)
 python inference/ego_lanes_lite_infer.py \
   --config EgoLanesLite_infer.yaml \
   --checkpoint checkpoint.pth \
   --input path/to/images_or_single_image \
   --output runs/inference/egolanes_lite
+
+# For an exported ONNX model (.onnx)
+python inference/ego_lanes_lite_infer.py \
+  --config EgoLanesLite_infer.yaml \
+  --onnx EgoLanesLite.onnx \
+  --input path/to/images_or_single_image \
+  --output runs/inference/egolanes_lite_onnx
 ```
 
 Use the non-lite inference script for checkpoints trained with `model_components.EgoLanesNetwork`:
@@ -293,6 +301,7 @@ python exports/lite_models/eval_egolaneslite.py \
   --datasets carla \
   --height 400 \
   --width 800 \
+  --head-upsampling 4 \
   --batch-size 1 \
   --device cuda \
   --out_dir runs/eval/egolanes_lite_onnx_eval \

@@ -73,6 +73,7 @@ EGOLANESLITE_DEFAULT_CONFIG = {
             "head_mid_channels": None,
             "head_upsampling": 1,
             "head_kernel_size": 3,
+            "head_upsampling_val": 4,
         },
     },
     "checkpoint": {

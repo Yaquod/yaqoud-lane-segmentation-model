@@ -8,6 +8,7 @@ import cv2
 import numpy as np
 import torch
 import yaml
+import onnxruntime as ort
 from PIL import Image
 from tqdm import tqdm
 
@@ -16,6 +17,27 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from model_components.lite_models.DeepLabv3Plus import DeepLabV3Plus
+
+# ============================================================
+# ONNX Wrapper
+# ============================================================
+
+
+class ONNXWrapper:
+    def __init__(self, onnx_path, device="cuda"):
+        providers = (
+            ["CUDAExecutionProvider"] if "cuda" in device else ["CPUExecutionProvider"]
+        )
+        self.session = ort.InferenceSession(str(onnx_path), providers=providers)
+        self.input_name = self.session.get_inputs()[0].name
+
+    def eval(self):
+        return self
+
+    def __call__(self, x):
+        x_np = x.detach().cpu().numpy()
+        out = self.session.run(None, {self.input_name: x_np})[0]
+        return torch.from_numpy(out).to(x.device)
 
 
 LANE_COLORS_RGB = np.array(
@@ -163,7 +185,10 @@ def run_one_image(
 def main():
     parser = argparse.ArgumentParser("EgoLanesLite checkpoint inference")
     parser.add_argument("--config", default="EgoLanesLite_infer.yaml")
-    parser.add_argument("--checkpoint", default="checkpoint.pth")
+    parser.add_argument("--checkpoint", default=None, help="Path to .pth checkpoint")
+    parser.add_argument(
+        "--onnx", default=None, help="Path to .onnx model (overrides checkpoint)"
+    )
     parser.add_argument("--input", required=True, help="Image file or directory")
     parser.add_argument("--output", default="runs/inference/egolanes_lite")
     parser.add_argument("--device", default="cuda")
@@ -188,8 +213,15 @@ def main():
     norm_cfg = aug_cfg["normalize"]
 
     device = resolve_device(args.device)
-    model = build_model(cfg, device)
-    load_checkpoint(model, args.checkpoint, device)
+
+    if args.onnx:
+        print("[INFO] Using ONNX backend")
+        model = ONNXWrapper(args.onnx, device=args.device)
+    else:
+        if args.checkpoint is None:
+            raise ValueError("Either --checkpoint or --onnx must be provided")
+        model = build_model(cfg, device)
+        load_checkpoint(model, args.checkpoint, device)
 
     images = collect_images(args.input)
     if len(images) == 0:

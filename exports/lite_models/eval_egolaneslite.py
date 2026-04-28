@@ -62,6 +62,12 @@ def main():
     ap.add_argument("--output-stride", type=int, default=16)
     ap.add_argument("--decoder-channels", type=int, default=64)
     ap.add_argument("--head-upsampling", type=int, default=1)
+    ap.add_argument(
+        "--head-upsampling-val",
+        type=int,
+        default=4,
+        help="Mask scale downsample for ground truth",
+    )
 
     # Resize
     ap.add_argument("--height", type=int, default=320)
@@ -90,6 +96,9 @@ def main():
     cfg["network"]["backbone"]["output_stride"] = args.output_stride
     cfg["network"]["decoder"]["deeplabv3plus_decoder_channels"] = args.decoder_channels
     cfg["network"]["head"]["head_upsampling"] = args.head_upsampling
+
+    # Needs to match the ground truth downsample factor
+    cfg["network"]["head"]["head_upsampling_val"] = args.head_upsampling_val
 
     cfg["dataloader"]["batch_size_val"] = args.batch_size
 
