@@ -1,5 +1,5 @@
 experiment:
-  name: "EgoLanesLite"
+  name: "EgoLanesLite_Train"
   output_dir: "runs/training/EgoLanesLite/"
   seed: 42
   device: "cuda" # "cuda", "cuda:0", or "cpu"
@@ -10,6 +10,7 @@ experiment:
 checkpoint:
   load_from: # path to checkpoint to load before training
   strict_load: true # whether to strictly enforce that the keys in state_dict match the keys returned by the model's state_dict function
+  fine_tune: false # true loads model weights only and resets optimizer/scheduler/counters
 
 dataset:
   training_sets: ["tusimple", "curvelanes"] # <--- LIST OF DATASETS TO USE FOR TRAIN

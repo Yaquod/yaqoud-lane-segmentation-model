@@ -12,8 +12,8 @@ Masks must be binary PNGs with values `0` or `255` in each channel.
 
 ```text
 .
-├── EgoLanesLite.yaml                  # Base training config
-├── EgoLanesLite_carla.yaml            # Carla/TuLane-derived fine-tuning config
+├── EgoLanesLite_train.yaml            # Training config
+├── EgoLanesLite_infer.yaml            # Inference config
 ├── checkpoint.pth                     # Example checkpoint
 ├── data_utils/
 │   ├── convert_tulane_to_carla_egolanes.py
@@ -121,10 +121,10 @@ Important: conversion from a single binary mask to semantic left/right/other cha
 
 ## Train From Scratch
 
-Use the base config:
+Use the training config:
 
 ```bash
-python training/train_ego_lanes_lite.py -c EgoLanesLite.yaml
+python training/train_ego_lanes_lite.py -c EgoLanesLite_train.yaml
 ```
 
 Main config fields:
@@ -150,15 +150,15 @@ runs/training/EgoLanesLite/<experiment_name>/
   logs/
 ```
 
-## Fine-Tune On Carla/TuLane-Derived Data
+## Fine-Tune With The Training Config
 
-Use the Carla config:
+To fine-tune instead of training from scratch, edit `EgoLanesLite_train.yaml` and set `checkpoint.load_from` to the checkpoint path:
 
 ```bash
-python training/train_ego_lanes_lite.py -c EgoLanesLite_carla.yaml
+python training/train_ego_lanes_lite.py -c EgoLanesLite_train.yaml
 ```
 
-The current fine-tune config uses:
+Fine-tuning uses:
 
 ```yaml
 checkpoint:
@@ -190,7 +190,7 @@ checkpoint:
 Then run:
 
 ```bash
-python training/train_ego_lanes_lite.py -c EgoLanesLite_carla.yaml
+python training/train_ego_lanes_lite.py -c EgoLanesLite_train.yaml
 ```
 
 Resume mode loads:
@@ -209,7 +209,7 @@ Use the lite-specific inference script for checkpoints trained with the configur
 
 ```bash
 python inference/ego_lanes_lite_infer.py \
-  --config EgoLanesLite_carla.yaml \
+  --config EgoLanesLite_infer.yaml \
   --checkpoint checkpoint.pth \
   --input path/to/images_or_single_image \
   --output runs/inference/egolanes_lite
@@ -351,7 +351,7 @@ experiment:
 2. Convert or prepare the dataset in `dataset/CarlaEgoLanes/processed`.
 3. Run a small conversion with previews and visually check labels.
 4. Run checkpoint inference on a few images to see baseline behavior.
-5. Fine-tune using `EgoLanesLite_carla.yaml`.
+5. Fine-tune using `EgoLanesLite_train.yaml`.
 6. Monitor validation mIoU and saved visualizations.
 7. Resume from `last.pth` if interrupted.
 8. Use `best.pth` for final inference/evaluation.

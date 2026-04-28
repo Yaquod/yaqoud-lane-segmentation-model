@@ -1,5 +1,5 @@
 experiment:
-  name: "EgoLanesLite_Carla"
+  name: "EgoLanesLite_Infer"
   output_dir: "runs/training/EgoLanesLite/"
   seed: 42
   device: "cuda"

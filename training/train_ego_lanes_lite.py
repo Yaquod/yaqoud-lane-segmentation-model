@@ -7,7 +7,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "-c", "--config",
-        default="EgoLanesLite.yaml",
+        default="EgoLanesLite_train.yaml",
         help="Path to lane detection training YAML config"
     )
 

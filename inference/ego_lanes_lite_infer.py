@@ -162,7 +162,7 @@ def run_one_image(
 
 def main():
     parser = argparse.ArgumentParser("EgoLanesLite checkpoint inference")
-    parser.add_argument("--config", default="EgoLanesLite_carla.yaml")
+    parser.add_argument("--config", default="EgoLanesLite_infer.yaml")
     parser.add_argument("--checkpoint", default="checkpoint.pth")
     parser.add_argument("--input", required=True, help="Image file or directory")
     parser.add_argument("--output", default="runs/inference/egolanes_lite")
