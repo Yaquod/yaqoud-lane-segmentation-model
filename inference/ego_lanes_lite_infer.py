@@ -19,9 +19,9 @@ from model_components.lite_models.DeepLabv3Plus import DeepLabV3Plus
 
 LANE_COLORS_RGB = np.array(
     [
-        [255, 0, 0],      # ego-left (channel 0): red
-        [0, 255, 0],      # ego-right (channel 1): green
-        [0, 0, 255],      # other (channel 2): blue
+        [255, 0, 0],  # ego-left (channel 0): red
+        [0, 255, 0],  # ego-right (channel 1): green
+        [0, 0, 255],  # other (channel 2): blue
     ],
     dtype=np.uint8,
 )
@@ -82,7 +82,11 @@ def build_model(cfg: dict, device: torch.device) -> torch.nn.Module:
 
 def load_checkpoint(model: torch.nn.Module, checkpoint_path: str, device: torch.device):
     ckpt = torch.load(checkpoint_path, map_location=device)
-    state = ckpt["model_state"] if isinstance(ckpt, dict) and "model_state" in ckpt else ckpt
+    state = (
+        ckpt["model_state"]
+        if isinstance(ckpt, dict) and "model_state" in ckpt
+        else ckpt
+    )
     missing, unexpected = model.load_state_dict(state, strict=True)
     if missing or unexpected:
         print("[WARN] Checkpoint loaded with key differences.")
@@ -132,9 +136,11 @@ def run_one_image(
         logits = model(tensor)[0]
 
     pred = (logits > threshold).permute(1, 2, 0).cpu().numpy().astype(np.uint8)
-    pred = cv2.resize(pred, (orig_w, orig_h), interpolation=cv2.INTER_NEAREST).astype(bool)
+    pred = cv2.resize(pred, (orig_w, orig_h), interpolation=cv2.INTER_NEAREST).astype(
+        bool
+    )
 
-    raw_mask = (pred.astype(np.uint8) * 255)
+    raw_mask = pred.astype(np.uint8) * 255
     colored = colorize_mask(pred)
     overlay_rgb = cv2.addWeighted(colored, alpha, image_rgb, 1.0 - alpha, 0.0)
 
@@ -145,10 +151,11 @@ def run_one_image(
 
     stem = image_path.stem
     Image.fromarray(raw_mask, mode="RGB").save(mask_dir / f"{stem}.png")
-    cv2.imwrite(
-        str(overlay_dir / f"{stem}.png"),
-        cv2.cvtColor(overlay_rgb, cv2.COLOR_RGB2BGR),
-    )
+
+    overlay_bgr = cv2.cvtColor(overlay_rgb, cv2.COLOR_RGB2BGR)
+    cv2.imwrite(str(overlay_dir / f"{stem}.png"), overlay_bgr)
+
+    return overlay_bgr
 
 
 def main():
@@ -160,6 +167,17 @@ def main():
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--threshold", type=float, default=0.0)
     parser.add_argument("--alpha", type=float, default=0.5)
+    parser.add_argument(
+        "--video",
+        action="store_true",
+        help="Generate a video from the predicted overlays",
+    )
+    parser.add_argument(
+        "--fps",
+        type=int,
+        default=30,
+        help="FPS for the output video if --video is used",
+    )
     args = parser.parse_args()
 
     cfg = load_yaml(args.config)
@@ -176,8 +194,14 @@ def main():
         raise RuntimeError(f"No images found in input: {args.input}")
 
     out_dir = Path(args.output)
+
+    video_writer = None
+    if args.video:
+        out_dir.mkdir(parents=True, exist_ok=True)
+        video_path = out_dir / "output_overlay.mp4"
+
     for image_path in images:
-        run_one_image(
+        overlay_bgr = run_one_image(
             model=model,
             image_path=image_path,
             out_dir=out_dir,
@@ -189,6 +213,19 @@ def main():
             threshold=args.threshold,
             alpha=args.alpha,
         )
+
+        if args.video:
+            if video_writer is None:
+                h, w = overlay_bgr.shape[:2]
+                fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+                video_writer = cv2.VideoWriter(
+                    str(video_path), fourcc, args.fps, (w, h)
+                )
+            video_writer.write(overlay_bgr)
+
+    if video_writer is not None:
+        video_writer.release()
+        print(f"Saved overlay video to: {video_path}")
 
     print(f"Saved {len(images)} predictions to {out_dir}")
 

@@ -228,7 +228,11 @@ Useful options:
 --device cuda
 --threshold 0.0
 --alpha 0.5
+--video
+--fps 30
 ```
+
+To create a video from all the predicted overlays, add the `--video` flag. This will save a smooth MP4 file, `output_overlay.mp4`, generated at the specified `--fps` (default 30) directly in the output directory.
 
 The inference script uses the model architecture from the YAML config, so the config must match the checkpoint architecture.
 
