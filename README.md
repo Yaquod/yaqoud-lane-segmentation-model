@@ -442,7 +442,7 @@ python data_utils/verify_carla_egolanes.py \
 
 This repo now includes a ROS2 node:
 
-- `inference/egolanes_lite_ros2_node.py`
+- `egolanes_lite_ros2/egolanes_lite_ros2/egolanes_lite_node.py`
 
 It runs an EgoLanesLite ONNX model with ONNX Runtime, subscribes to an RGB camera topic, and publishes a `mono8` lane mask image.
 
@@ -453,10 +453,23 @@ Published mask semantics:
 - `2` = ego-right lane
 - `3` = other lane
 
-Run example:
+Build and source:
 
 ```bash
-python inference/egolanes_lite_ros2_node.py \
+colcon build --packages-select egolanes_lite_ros2
+source install/setup.bash
+```
+
+Run with launch file:
+
+```bash
+ros2 launch egolanes_lite_ros2 egolanes_lite.launch.py
+```
+
+Run directly:
+
+```bash
+ros2 run egolanes_lite_ros2 egolanes_lite_node \
   --ros-args \
   -p model_path:=EgoLanesLite_best.onnx \
   -p image_topic:=/sensing/camera/traffic_light/image_raw \

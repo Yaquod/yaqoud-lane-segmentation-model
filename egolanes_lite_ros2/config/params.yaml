@@ -1,0 +1,11 @@
+egolanes_lite_node:
+  ros__parameters:
+    model_path: EgoLanesLite_best.onnx
+    image_topic: /sensing/camera/traffic_light/image_raw
+    mask_topic: /perception/lane_detection/mask
+    input_h: 400
+    input_w: 800
+    threshold: 0.0
+    mean: [0.485, 0.456, 0.406]
+    std: [0.229, 0.224, 0.225]
+    use_cuda: true

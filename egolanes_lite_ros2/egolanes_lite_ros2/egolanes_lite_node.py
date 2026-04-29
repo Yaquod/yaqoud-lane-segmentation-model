@@ -49,37 +49,65 @@ class EgoLanesLiteNode(Node):
             providers.append("CUDAExecutionProvider")
         providers.append("CPUExecutionProvider")
 
+        resolved_model_path = self._resolve_model_path(model_path)
         self.session = ort.InferenceSession(
-            str(self._resolve_model_path(model_path)),
+            str(resolved_model_path),
             providers=providers,
         )
         self.input_name = self.session.get_inputs()[0].name
         self.output_name = self.session.get_outputs()[0].name
+        self._align_input_size_with_model()
 
         self.bridge = CvBridge()
         self.sub = self.create_subscription(Image, image_topic, self.image_callback, 10)
         self.pub = self.create_publisher(Image, mask_topic, 10)
 
         self.get_logger().info(
-            f"EgoLanesLite ROS2 node ready | model={model_path} | providers={providers} "
+            f"EgoLanesLite ROS2 node ready | model={resolved_model_path} | providers={providers} "
             f"| input={self.input_w}x{self.input_h}"
         )
 
     @staticmethod
     def _resolve_model_path(model_path: str) -> Path:
-        path = Path(model_path)
-        if path.is_file():
-            return path
+        path = Path(model_path).expanduser()
+        candidates = [path]
+        if not path.is_absolute():
+            cwd_candidate = Path.cwd() / path
+            candidates.append(cwd_candidate)
 
-        root_candidate = Path.cwd() / model_path
-        if root_candidate.is_file():
-            return root_candidate
+            source_file = Path(__file__).resolve()
+            candidates.extend(parent / path for parent in source_file.parents)
 
-        repo_candidate = Path(__file__).resolve().parents[1] / model_path
-        if repo_candidate.is_file():
-            return repo_candidate
+        checked = []
+        for candidate in candidates:
+            resolved_candidate = candidate.resolve()
+            checked.append(str(resolved_candidate))
+            if resolved_candidate.is_file():
+                return resolved_candidate
 
-        raise FileNotFoundError(f"ONNX model not found: {model_path}")
+        raise FileNotFoundError(
+            f"ONNX model not found: {model_path}. Checked: {checked}"
+        )
+
+    @staticmethod
+    def _is_positive_int(value) -> bool:
+        return isinstance(value, int) and value > 0
+
+    def _align_input_size_with_model(self) -> None:
+        shape = self.session.get_inputs()[0].shape
+        if len(shape) != 4:
+            return
+
+        model_h, model_w = shape[2], shape[3]
+        if self._is_positive_int(model_h) and self._is_positive_int(model_w):
+            if (self.input_h, self.input_w) != (model_h, model_w):
+                self.get_logger().warn(
+                    "Configured input size "
+                    f"{self.input_w}x{self.input_h} does not match model size "
+                    f"{model_w}x{model_h}. Using model size."
+                )
+                self.input_h = model_h
+                self.input_w = model_w
 
     def _preprocess(self, frame_rgb: np.ndarray) -> np.ndarray:
         image = cv2.resize(
