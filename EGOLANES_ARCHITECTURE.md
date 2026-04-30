@@ -338,36 +338,94 @@ File: [data_utils/lite_models/helpers/loss.py](data_utils/lite_models/helpers/lo
 
 Lanes are fundamentally thin, high-frequency structures. The loss function is designed to enforce both pixel-level accuracy and structural sharpness.
 
-Per channel:
-
-1. **Binary Cross-Entropy Loss** ( $L_{BCE}$ ):
-
-   Pixel-wise classification over the raw logits:
+The per-channel loss is a weighted sum of two terms:
 
 ```math
-\mathcal{L}_{\text{BCE}}(P, G) = - \frac{1}{N} \sum_{i} \left[ G_i \cdot \log(\sigma(P_i)) + (1 - G_i) \cdot \log(1 - \sigma(P_i)) \right]
+\mathcal{L}_{\text{channel}} = \mathcal{L}_{\text{BCE}} + \lambda_{\text{edge}} \cdot \mathcal{L}_{\text{Edge}}
 ```
 
-2. **Multi-Scale Edge / Boundary Loss** ( $L_{Edge}$ ):
+where $\lambda_{\text{edge}}$ is the edge loss weight (default `1.0`).
 
-   To ensure sharp boundaries for thin lane structures, Sobel filters (S_x, S_y) extract gradients from predictions and ground truth. Inspired by depth estimation tasks, the absolute difference is averaged across 5 progressively downsampled resolutions (using `AvgPool2d`):
+---
+
+### 7.0.1 Binary Cross-Entropy Loss ( $\mathcal{L}_{\text{BCE}}$ )
+
+Pixel-wise classification over the raw logits:
 
 ```math
-\mathcal{L}_{\text{Sobel}}(P, G) = \frac{1}{N} \sum_{i} \left( \left| S_x \ast P - S_x \ast G \right| + \left| S_y \ast P - S_y \ast G \right| \right)
+\mathcal{L}_{\text{BCE}}(P,\, G) = -\frac{1}{N} \sum_{i=1}^{N} \left[ G_i \cdot \log\!\bigl(\sigma(P_i)\bigr) + (1 - G_i) \cdot \log\!\bigl(1 - \sigma(P_i)\bigr) \right]
 ```
+
+**Where:**
+
+| Symbol          | Description                                                                        |
+| --------------- | ---------------------------------------------------------------------------------- |
+| $P$             | Predicted logit map (raw model output, before sigmoid), shape $H \times W$         |
+| $G$             | Ground-truth binary mask for the channel, values in $\{0, 1\}$, shape $H \times W$ |
+| $P_i$           | Predicted logit at pixel $i$                                                       |
+| $G_i$           | Ground-truth label at pixel $i$ ($1$ = lane, $0$ = background)                     |
+| $\sigma(\cdot)$ | Sigmoid function: $\sigma(x) = \frac{1}{1 + e^{-x}}$                               |
+| $N$             | Total number of pixels in the map ($H \times W$)                                   |
+| $i$             | Pixel index, ranging from $1$ to $N$                                               |
+
+---
+
+### 7.0.2 Multi-Scale Edge / Boundary Loss ( $\mathcal{L}_{\text{Edge}}$ )
+
+To ensure sharp boundaries for thin lane structures, Sobel filters extract horizontal and vertical gradients from both predictions and ground truth. Inspired by depth estimation tasks (MegaDepth), the absolute difference is averaged across 5 progressively downsampled resolutions (using `AvgPool2d`):
+
+**Single-scale Sobel loss:**
 
 ```math
-\mathcal{L}_{\text{Edge}}(P, G) = \frac{1}{5} \sum_{s=0}^{4} \mathcal{L}_{\text{Sobel}}(\text{AvgPool}^{(s)}(P),\; \text{AvgPool}^{(s)}(G))
+\mathcal{L}_{\text{Sobel}}(P,\, G) = \frac{1}{N} \sum_{i=1}^{N} \left( \left| (S_x \ast P)_i - (S_x \ast G)_i \right| + \left| (S_y \ast P)_i - (S_y \ast G)_i \right| \right)
 ```
 
-**Total Loss Weighting**:
-Ego-lanes are weighted heavily (2×) as they are the most safety-critical for autonomous path planning:
+**Multi-scale aggregation:**
 
 ```math
-\mathcal{L}_{\text{Total}} = 2.0 \cdot \mathcal{L}_{\text{ego-left}} + 2.0 \cdot \mathcal{L}_{\text{ego-right}} + 1.0 \cdot \mathcal{L}_{\text{other}}
+\mathcal{L}_{\text{Edge}}(P,\, G) = \frac{1}{5} \sum_{s=0}^{4} \mathcal{L}_{\text{Sobel}}\!\left(\text{AvgPool}^{(s)}(P),\;\text{AvgPool}^{(s)}(G)\right)
 ```
 
-Rationale: left/right ego boundaries are weighted higher for driving safety relevance.
+**Where:**
+
+| Symbol                        | Description                                                                                                                  |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| $P$                           | Predicted logit map (same as in BCE), shape $H \times W$                                                                     |
+| $G$                           | Ground-truth binary mask for the channel, shape $H \times W$                                                                 |
+| $S_x$                         | Sobel filter kernel for horizontal gradients (detects vertical edges)                                                        |
+| $S_y$                         | Sobel filter kernel for vertical gradients (detects horizontal edges)                                                        |
+| $\ast$                        | 2D convolution operator                                                                                                      |
+| $(S_x \ast P)_i$              | Horizontal edge response of the prediction at pixel $i$                                                                      |
+| $(S_x \ast G)_i$              | Horizontal edge response of the ground truth at pixel $i$                                                                    |
+| $N$                           | Total number of pixels at the current scale                                                                                  |
+| $s$                           | Scale index ($0$ = original resolution, $1\text{–}4$ = progressively $2\times$ downsampled)                                  |
+| $\text{AvgPool}^{(s)}(\cdot)$ | $s$ successive applications of `AvgPool2d(kernel=2, stride=2)`, producing a $\frac{H}{2^s} \times \frac{W}{2^s}$ feature map |
+
+---
+
+### 7.0.3 Total Loss Weighting
+
+The per-channel losses are combined with class-specific weights. Ego-lanes are weighted heavily (2×) as they are the most safety-critical for autonomous path planning:
+
+```math
+\mathcal{L}_{\text{Total}} = w_{\text{left}} \cdot \mathcal{L}_{\text{ego-left}} + w_{\text{right}} \cdot \mathcal{L}_{\text{ego-right}} + w_{\text{other}} \cdot \mathcal{L}_{\text{other}}
+```
+
+**Where:**
+
+| Symbol                           | Description                                                        | Default |
+| -------------------------------- | ------------------------------------------------------------------ | ------- |
+| $\mathcal{L}_{\text{ego-left}}$  | Combined BCE + Edge loss for Channel 0 (ego-left lane boundary)    | —       |
+| $\mathcal{L}_{\text{ego-right}}$ | Combined BCE + Edge loss for Channel 1 (ego-right lane boundary)   | —       |
+| $\mathcal{L}_{\text{other}}$     | Combined BCE + Edge loss for Channel 2 (all other lane boundaries) | —       |
+| $w_{\text{left}}$                | Weight for ego-left channel                                        | $2.0$   |
+| $w_{\text{right}}$               | Weight for ego-right channel                                       | $2.0$   |
+| $w_{\text{other}}$               | Weight for other-lanes channel                                     | $1.0$   |
+
+> [!NOTE]
+> Left/right ego boundaries are weighted higher because accurate prediction of the ego-lane is directly used by the downstream autonomous stack for lateral control and path planning. Misdetecting an ego-lane boundary is far more safety-critical than misdetecting a distant lane.
+
+---
 
 ### 7.1 Ground-Truth Downsampling Rule
 
