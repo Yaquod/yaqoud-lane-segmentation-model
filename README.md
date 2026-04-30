@@ -4,11 +4,11 @@
 
 EgoLanes predicts a **3-channel binary lane mask** from a single front-camera RGB image, identifying the lanes most relevant to the ego vehicle:
 
-| Channel | Meaning |
-|---------|---------|
-| 0 | Ego-left lane boundary |
-| 1 | Ego-right lane boundary |
-| 2 | Other lanes |
+| Channel | Meaning                 |
+| ------- | ----------------------- |
+| 0       | Ego-left lane boundary  |
+| 1       | Ego-right lane boundary |
+| 2       | Other lanes             |
 
 The active training and deployment path is **EgoLanesLite**, which pairs industry-standard backbones (EfficientNet-B0 via [timm](https://github.com/huggingface/pytorch-image-models)) with **DeepLabV3+** or **UNet++** decoders from [Segmentation Models PyTorch](https://github.com/qubvel-org/segmentation_models.pytorch). A legacy custom pipeline (`EgoLanesNetwork`) is retained for backward compatibility.
 
@@ -148,8 +148,16 @@ Expected dataset layout:
 
 ## Documentation
 
-| Document | Description |
-|----------|-------------|
-| [EGOLANES_ARCHITECTURE.md](EGOLANES_ARCHITECTURE.md) | Complete architecture guide — model internals, loss math, data pipeline, training details, legacy vs. Lite comparison, and academic references |
-| [configs/EgoLanesLite_train.yaml](configs/EgoLanesLite_train.yaml) | Training configuration reference |
-| [configs/EgoLanesLite_infer.yaml](configs/EgoLanesLite_infer.yaml) | Inference / export configuration reference |
+| Document                                                           | Description                                                                                                                                    |
+| ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| [EGOLANES_ARCHITECTURE.md](EGOLANES_ARCHITECTURE.md)               | Complete architecture guide — model internals, loss math, data pipeline, training details, legacy vs. Lite comparison, and academic references |
+| [configs/EgoLanesLite_train.yaml](configs/EgoLanesLite_train.yaml) | Training configuration reference                                                                                                               |
+| [configs/EgoLanesLite_infer.yaml](configs/EgoLanesLite_infer.yaml) | Inference / export configuration reference                                                                                                     |
+| [training/train_ego_lanes.py](training/train_ego_lanes.py)         | Legacy training entry point                                                                                                                    |
+| [training/ego_lanes_trainer.py](training/ego_lanes_trainer.py)     | Legacy trainer class bridging EgoLanesNetwork                                                                                                  |
+
+---
+
+## Acknowledgments
+
+The original code belongs to [Autoware Vision Pilot](https://github.com/autowarefoundation/autoware_vision_pilot/tree/main) and has been adjusted and modified for the requirements of this repository.

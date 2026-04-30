@@ -211,6 +211,13 @@ The final prediction layer mapping decoded features to the 3-channel logits form
 - GeLU activations in hidden layers
 - Outputs unnormalized logits (no sigmoid) — processed via sigmoid/thresholding during inference
 
+### 5.3 Legacy Training Pipeline
+
+The legacy architecture relies on a custom training loop with explicit dataset mixing and gradient accumulation.
+
+- **Entry point**: [training/train_ego_lanes.py](training/train_ego_lanes.py)
+- **Trainer class**: [training/ego_lanes_trainer.py](training/ego_lanes_trainer.py)
+
 ---
 
 ## 6. Active Architecture: EgoLanesLite
@@ -602,7 +609,7 @@ Example strategy: pretrain on Cityscapes segmentation -> transfer weights -> fin
 ## 13. Practical File Map (Concrete)
 
 ```text
-Last-Hope/
+Repository/
 ├── model_components/
 │   ├── ego_lanes_network.py          # Legacy full network
 │   ├── backbone.py                   # Legacy EfficientNet-B0 feature extractor
@@ -622,7 +629,9 @@ Last-Hope/
 │   └── EgoLanesLite_infer.yaml       # Inference/export config
 ├── training/
 │   ├── train_ego_lanes_lite.py       # Entry point
+│   ├── train_ego_lanes.py            # Legacy training entry point
 │   ├── ego_lanes_lite_trainer.py     # Lane task trainer
+│   ├── ego_lanes_trainer.py          # Legacy trainer class
 │   └── lite_trainer_base.py          # Shared trainer base
 ├── data_utils/lite_models/
 │   ├── dataloaders/                  # Carla/TUSimple/CurveLanes loaders
