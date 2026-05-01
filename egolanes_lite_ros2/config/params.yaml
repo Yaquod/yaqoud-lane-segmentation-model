@@ -1,35 +1,26 @@
 egolanes_lite_node:
   ros__parameters:
-    model_path: EgoLanesLite_best.onnx
-    image_topic: /sensing/camera/traffic_light/image_raw
-    mask_topic: /perception/lane_detection/mask
+    model_path: "EgoLanesLite_best.onnx"
+    image_topic: "/sensing/camera/traffic_light/image_raw"
+    mask_topic: "/perception/lane_detection/mask"
     input_h: 400
     input_w: 800
-    threshold: 0.0
+    threshold: 0.5  # Changed from 0.0 to avoid noise
     mean: [0.485, 0.456, 0.406]
     std: [0.229, 0.224, 0.225]
     use_cuda: true
 
 egolanes_ipm_node:
   ros__parameters:
-    mask_topic: /perception/lane_detection/mask
-    costmap_topic: /perception/lane_detection/costmap
-    vis_topic: /perception/lane_detection/ipm_vis
+    # Use a flattened list if your node handles it, 
     # Source points in the camera image (default 800x400) forming a trapezoid
-    src_points: [
-      [300.0, 250.0],  # Top-left
-      [500.0, 250.0],  # Top-right
-      [750.0, 400.0],  # Bottom-right
-      [50.0, 400.0]    # Bottom-left
-    ]
+    # Format: [x1, y1, x2, y2, x3, y3, x4, y4] (Top-Left, Top-Right, Bottom-Right, Bottom-Left)
+    src_points: [480.0, 450.0, 800.0, 450.0, 1200.0, 720.0, 80.0, 720.0]
+    
     # Destination points in the BEV image forming a rectangle
-    dst_points: [
-      [100.0, 0.0],    # Top-left
-      [300.0, 0.0],    # Top-right
-      [300.0, 400.0],  # Bottom-right
-      [100.0, 400.0]   # Bottom-left
-    ]
-    grid_resolution: 0.05  # meters per pixel
-    grid_width: 400        # pixels
-    grid_height: 400       # pixels
+    # Format: [x1, y1, x2, y2, x3, y3, x4, y4]
+    dst_points: [100.0, 0.0, 300.0, 0.0, 300.0, 400.0, 100.0, 400.0]
+    grid_resolution: 0.05
+    grid_width: 400
+    grid_height: 400
     publish_vis: true

@@ -42,13 +42,26 @@ The node parameters are defined in `config/params.yaml`.
 |---|---|---|---|
 | `model_path` | string | `EgoLanesLite_best.onnx` | Path to the ONNX model. Can be absolute or relative to the workspace/package. |
 | `image_topic` | string | `/sensing/camera/traffic_light/image_raw` | Input camera image topic. |
-| `mask_topic` | string | `/perception/lane_detection/mask` | Output segmentation mask topic. |
+| `mask_topic` | string | `/perception/lane_detection/mask` | Output `mono8` segmentation mask topic. |
+| `mask_vis_topic` | string | `/perception/lane_detection/mask_vis` | Output `rgb8` colored visualization topic. |
 | `input_h` | int | `400` | Model input height. |
 | `input_w` | int | `800` | Model input width. |
-| `threshold` | float | `0.0` | Confidence threshold for masking logic. |
+| `threshold` | float | `0.5` | Confidence threshold for masking logic. |
 | `mean` | double[] | `[0.485, 0.456, 0.406]` | Image normalization mean values. |
 | `std` | double[] | `[0.229, 0.224, 0.225]` | Image normalization std dev values. |
 | `use_cuda` | bool | `true` | Enable CUDA (GPU) inference if available. |
+
+### IPM Node Configuration (Costmap Generation)
+
+The package also includes an Inverse Perspective Mapping (IPM) node that runs alongside the segmentation model to project the 2D mask into a 3D top-down `OccupancyGrid`.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `src_points` | float[] | `[480.0, 450.0, ...]` | A flat array of 4 (x,y) pixel coordinates forming a trapezoid on the original camera image. **MUST BE TUNED to your camera resolution and pitch.** |
+| `dst_points` | float[] | `[100.0, 0.0, ...]` | A flat array of 4 (x,y) coordinates forming a rectangle in the output BEV grid. |
+| `grid_resolution` | float | `0.05` | Meters per pixel for the output costmap. |
+| `grid_width` / `height` | int | `400` | Dimensions of the published `OccupancyGrid`. |
+| `publish_vis` | bool | `true` | Publishes a colorful BEV image to `/perception/lane_detection/ipm_vis` for tuning. |
 
 **Model Placement:** Ensure your exported `EgoLanesLite_best.onnx` is located where the node can find it (e.g., in the workspace root, or use an absolute path in `params.yaml`).
 
@@ -76,11 +89,12 @@ To validate the model in simulation using AWSIM:
    ros2 launch egolanes_lite_ros2 egolanes_lite.launch.py
    ```
 5. **Visualize Results:**
-   Open `rqt_image_view` to see the live segmentation mask published by the node:
-   ```bash
-   ros2 run rqt_image_view rqt_image_view
-   ```
-   Select `/perception/lane_detection/mask` from the dropdown. *Note: The output is a `mono8` image where pixel values map to class IDs (0: background, 1: left lane, 2: right lane, 3: other).*
+   Open **RViz** (or `rqt_image_view`) to see the live outputs. The package publishes three topics:
+   - `/perception/lane_detection/mask`: The raw `mono8` mask (0, 1, 2, 3) used by the downstream planner. *(Note: This will look pitch black in RViz!)*
+   - `/perception/lane_detection/mask_vis`: A brightly colored 2D overlay of the predicted lanes.
+   - `/perception/lane_detection/ipm_vis`: A brightly colored top-down Bird's-Eye-View projection.
+
+   **Crucial Tuning Step:** Look at `/perception/lane_detection/ipm_vis`. If the lanes do not look perfectly parallel and straight, you must adjust the `src_points` in `params.yaml` to match your AWSIM camera's resolution and pitch.
 
 ## 4. Autoware Integration Walkthrough
 
@@ -103,5 +117,11 @@ To embed the EgoLanesLite node permanently into the Autoware perception stack:
    </group>
    ```
 
-3. **Downstream Pipeline Consideration:**
-   The output of this node is a raw semantic mask. Autoware's planning modules usually expect lane vectors or costmaps. Depending on your system architecture, you may need to write or configure a post-processing node that subscribes to `/perception/lane_detection/mask`, extracts the lane centerlines (class 1 and 2), and converts them into `autoware_auto_perception_msgs/msg/PointClusters` or a format ingestible by the `lane_planner` or `freespace_planner`.
+3. **Downstream Pipeline Consideration (The IPM Node):**
+   Autoware's planning modules do not understand raw 2D semantic images. They expect spatial data like `OccupancyGrids` or `PointClusters`.
+   To solve this, the launch file automatically starts the **`egolanes_ipm_node`**. This node acts as a bridge:
+   - It subscribes to your raw `/perception/lane_detection/mask`.
+   - It applies an Inverse Perspective Mapping (IPM) projection.
+   - It publishes a `nav_msgs/OccupancyGrid` on `/perception/lane_detection/costmap` in the `base_link` frame.
+   
+   Once your `src_points` are tuned, you can simply configure Autoware's `freespace_planner` or `costmap_generator` to subscribe to this `/perception/lane_detection/costmap` topic, and the vehicle will treat the lane boundaries as obstacles!

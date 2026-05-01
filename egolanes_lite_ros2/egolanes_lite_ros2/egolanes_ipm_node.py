@@ -18,13 +18,12 @@ class EgoLanesIPMNode(Node):
         self.declare_parameter("costmap_topic", "/perception/lane_detection/costmap")
         self.declare_parameter("vis_topic", "/perception/lane_detection/ipm_vis")
         
-        # Default source points (Trapezoid in camera image)
-        default_src = [[300.0, 250.0], [500.0, 250.0], [750.0, 400.0], [50.0, 400.0]]
-        # Default destination points (Rectangle in BEV image)
-        default_dst = [[100.0, 0.0], [300.0, 0.0], [300.0, 400.0], [100.0, 400.0]]
+        # Default source points (Trapezoid in camera image, flat array)
+        default_src = [300.0, 250.0, 500.0, 250.0, 750.0, 400.0, 50.0, 400.0]
+        # Default destination points (Rectangle in BEV image, flat array)
+        default_dst = [100.0, 0.0, 300.0, 0.0, 300.0, 400.0, 100.0, 400.0]
         
-        # In ROS2 Foxy/Galactic/Humble, flat arrays are easier to parse
-        # We will parse a list of lists from the yaml config
+        # In ROS2, parameters cannot be nested lists. We use flat lists of floats.
         self.declare_parameter("src_points", default_src)
         self.declare_parameter("dst_points", default_dst)
         
@@ -47,17 +46,14 @@ class EgoLanesIPMNode(Node):
         self.publish_vis = bool(self.get_parameter("publish_vis").value)
 
         # Process points into numpy arrays
-        # Note: Depending on how ROS2 parses the nested list, it might come as a flat list or list of lists.
-        # We handle list of lists here.
+        # We handle flat lists of 8 floats and reshape them to 4x2
         try:
-            self.src_pts = np.array(src_pts_param, dtype=np.float32)
-            self.dst_pts = np.array(dst_pts_param, dtype=np.float32)
-            if self.src_pts.shape != (4, 2) or self.dst_pts.shape != (4, 2):
-                raise ValueError("Points must be shaped 4x2")
+            self.src_pts = np.array(src_pts_param, dtype=np.float32).reshape(4, 2)
+            self.dst_pts = np.array(dst_pts_param, dtype=np.float32).reshape(4, 2)
         except Exception as e:
             self.get_logger().error(f"Failed to parse src_points/dst_points: {e}. Using defaults.")
-            self.src_pts = np.array(default_src, dtype=np.float32)
-            self.dst_pts = np.array(default_dst, dtype=np.float32)
+            self.src_pts = np.array(default_src, dtype=np.float32).reshape(4, 2)
+            self.dst_pts = np.array(default_dst, dtype=np.float32).reshape(4, 2)
 
         # Compute Perspective Transform Matrix
         self.M = cv2.getPerspectiveTransform(self.src_pts, self.dst_pts)
