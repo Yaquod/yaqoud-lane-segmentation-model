@@ -25,7 +25,8 @@ setup(
     tests_require=["pytest"],
     entry_points={
         "console_scripts": [
-            "egolanes_lite_node = egolanes_lite_ros2.egolanes_lite_node:main"
+            "egolanes_lite_node = egolanes_lite_ros2.egolanes_lite_node:main",
+            "egolanes_ipm_node = egolanes_lite_ros2.egolanes_ipm_node:main"
         ],
     },
 )

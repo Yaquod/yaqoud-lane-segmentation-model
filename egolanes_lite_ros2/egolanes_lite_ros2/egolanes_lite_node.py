@@ -9,7 +9,7 @@ import rclpy
 from cv_bridge import CvBridge
 from rclpy.node import Node
 from sensor_msgs.msg import Image
-
+from rclpy.qos import qos_profile_sensor_data
 
 class EgoLanesLiteNode(Node):
     def __init__(self):
@@ -29,6 +29,7 @@ class EgoLanesLiteNode(Node):
         )
         self.declare_parameter("image_topic", "/sensing/camera/traffic_light/image_raw")
         self.declare_parameter("mask_topic", "/perception/lane_detection/mask")
+        self.declare_parameter("mask_vis_topic", "/perception/lane_detection/mask_vis")
         self.declare_parameter("use_cuda", True)
 
         model_path = self.get_parameter("model_path").value
@@ -41,6 +42,7 @@ class EgoLanesLiteNode(Node):
             raise ValueError("Parameters 'mean' and 'std' must be length-3 arrays.")
         image_topic = self.get_parameter("image_topic").value
         mask_topic = self.get_parameter("mask_topic").value
+        mask_vis_topic = self.get_parameter("mask_vis_topic").value
         use_cuda = bool(self.get_parameter("use_cuda").value)
 
         providers = []
@@ -59,8 +61,24 @@ class EgoLanesLiteNode(Node):
         self._align_input_size_with_model()
 
         self.bridge = CvBridge()
-        self.sub = self.create_subscription(Image, image_topic, self.image_callback, 10)
-        self.pub = self.create_publisher(Image, mask_topic, 10)
+        # self.sub = self.create_subscription(Image, image_topic, self.image_callback, 10)
+        self.sub = self.create_subscription(
+            Image,
+            image_topic,
+            self.image_callback,
+            qos_profile_sensor_data
+        )
+        # self.pub = self.create_publisher(Image, mask_topic, 10)
+        self.pub = self.create_publisher(
+            Image,
+            mask_topic,
+            qos_profile_sensor_data
+        )
+        self.vis_pub = self.create_publisher(
+            Image,
+            mask_vis_topic,
+            qos_profile_sensor_data
+        )
 
         self.get_logger().info(
             f"EgoLanesLite ROS2 node ready | model={resolved_model_path} | providers={providers} "
@@ -160,6 +178,16 @@ class EgoLanesLiteNode(Node):
         out_msg.header = msg.header
         self.pub.publish(out_msg)
 
+        # Create an RGB visualization image for RViz
+        vis_img = np.zeros((msg.height, msg.width, 3), dtype=np.uint8)
+        vis_img[mask_mono8 == 1] = [255, 0, 0]   # Ego-left: Red
+        vis_img[mask_mono8 == 2] = [0, 255, 0]   # Ego-right: Green
+        vis_img[mask_mono8 == 3] = [0, 0, 255]   # Other lanes: Blue
+
+        vis_msg = self.bridge.cv2_to_imgmsg(vis_img, encoding="rgb8")
+        vis_msg.header = msg.header
+        self.vis_pub.publish(vis_msg)
+
 
 def main(args=None):
     rclpy.init(args=args)
@@ -168,7 +196,8 @@ def main(args=None):
         rclpy.spin(node)
     finally:
         node.destroy_node()
-        rclpy.shutdown()
+        if rclpy.ok():
+            rclpy.shutdown()
 
 
 if __name__ == "__main__":
