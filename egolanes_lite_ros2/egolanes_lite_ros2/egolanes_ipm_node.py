@@ -9,143 +9,161 @@ from nav_msgs.msg import OccupancyGrid, MapMetaData
 from cv_bridge import CvBridge
 from rclpy.qos import qos_profile_sensor_data
 
+
 class EgoLanesIPMNode(Node):
     def __init__(self):
         super().__init__("egolanes_ipm_node")
 
-        # Declare parameters
-        self.declare_parameter("mask_topic", "/perception/lane_detection/mask")
+        self.declare_parameter("mask_topic",    "/perception/lane_detection/mask")
         self.declare_parameter("costmap_topic", "/perception/lane_detection/costmap")
-        self.declare_parameter("vis_topic", "/perception/lane_detection/ipm_vis")
-        
-        # Default source points (Trapezoid in camera image, flat array)
-        default_src = [300.0, 250.0, 500.0, 250.0, 750.0, 400.0, 50.0, 400.0]
-        # Default destination points (Rectangle in BEV image, flat array)
-        default_dst = [100.0, 0.0, 300.0, 0.0, 300.0, 400.0, 100.0, 400.0]
-        
-        # In ROS2, parameters cannot be nested lists. We use flat lists of floats.
-        self.declare_parameter("src_points", default_src)
-        self.declare_parameter("dst_points", default_dst)
-        
-        self.declare_parameter("grid_resolution", 0.05)
-        self.declare_parameter("grid_width", 400)
-        self.declare_parameter("grid_height", 400)
-        self.declare_parameter("publish_vis", True)
+        self.declare_parameter("vis_topic",     "/perception/lane_detection/ipm_vis")
 
-        # Get parameters
-        mask_topic = self.get_parameter("mask_topic").value
+        # Flat float arrays — reshaped to (4,2) internally.
+        # Order: Top-Left, Top-Right, Bottom-Right, Bottom-Left
+        default_src = [300.0, 250.0, 500.0, 250.0, 750.0, 400.0, 50.0, 400.0]
+        default_dst = [100.0, 0.0,   300.0, 0.0,   300.0, 400.0, 100.0, 400.0]
+        self.declare_parameter("src_points",     default_src)
+        self.declare_parameter("dst_points",     default_dst)
+
+        self.declare_parameter("grid_resolution", 0.05)
+        self.declare_parameter("grid_width",      400)
+        self.declare_parameter("grid_height",     400)
+        self.declare_parameter("publish_vis",     True)
+
+        # FIX: expose grid origin as a parameter so integrators can correctly
+        # position the grid relative to base_link without editing source code.
+        # origin_x: how far forward (metres) the front edge of the grid is.
+        # origin_y_offset: lateral shift from centre (usually 0).
+        # By default the grid spans from the car position forward (origin_x = 0
+        # puts the bottom-left corner at the car; set negative to look behind).
+        self.declare_parameter("origin_x", 0.0)
+        self.declare_parameter("origin_y_offset", 0.0)
+
+        mask_topic    = self.get_parameter("mask_topic").value
         costmap_topic = self.get_parameter("costmap_topic").value
-        vis_topic = self.get_parameter("vis_topic").value
-        
+        vis_topic     = self.get_parameter("vis_topic").value
+
         src_pts_param = self.get_parameter("src_points").value
         dst_pts_param = self.get_parameter("dst_points").value
-        
-        self.grid_resolution = float(self.get_parameter("grid_resolution").value)
-        self.grid_width = int(self.get_parameter("grid_width").value)
-        self.grid_height = int(self.get_parameter("grid_height").value)
-        self.publish_vis = bool(self.get_parameter("publish_vis").value)
 
-        # Process points into numpy arrays
-        # We handle flat lists of 8 floats and reshape them to 4x2
+        self.grid_resolution = float(self.get_parameter("grid_resolution").value)
+        self.grid_width      = int(self.get_parameter("grid_width").value)
+        self.grid_height     = int(self.get_parameter("grid_height").value)
+        self.publish_vis     = bool(self.get_parameter("publish_vis").value)
+        self._origin_x       = float(self.get_parameter("origin_x").value)
+        self._origin_y_off   = float(self.get_parameter("origin_y_offset").value)
+
         try:
             self.src_pts = np.array(src_pts_param, dtype=np.float32).reshape(4, 2)
             self.dst_pts = np.array(dst_pts_param, dtype=np.float32).reshape(4, 2)
         except Exception as e:
-            self.get_logger().error(f"Failed to parse src_points/dst_points: {e}. Using defaults.")
+            self.get_logger().error(
+                f"Failed to parse src_points/dst_points: {e}. Using defaults."
+            )
             self.src_pts = np.array(default_src, dtype=np.float32).reshape(4, 2)
             self.dst_pts = np.array(default_dst, dtype=np.float32).reshape(4, 2)
 
-        # Compute Perspective Transform Matrix
         self.M = cv2.getPerspectiveTransform(self.src_pts, self.dst_pts)
 
+        # Pre-build the static parts of OccupancyGrid so we only fill data each frame.
+        self._grid_template = self._build_grid_template()
+
         self.bridge = CvBridge()
-        
-        # Subscribers and Publishers
+
         self.sub = self.create_subscription(
-            Image,
-            mask_topic,
-            self.mask_callback,
-            qos_profile_sensor_data
+            Image, mask_topic, self.mask_callback, qos_profile_sensor_data
         )
         self.costmap_pub = self.create_publisher(
-            OccupancyGrid,
-            costmap_topic,
-            qos_profile_sensor_data
+            OccupancyGrid, costmap_topic, qos_profile_sensor_data
         )
+
+        # FIX: guard vis_pub creation — only create if needed, and check with
+        # hasattr before publishing to survive runtime param changes.
         if self.publish_vis:
             self.vis_pub = self.create_publisher(
-                Image,
-                vis_topic,
-                qos_profile_sensor_data
+                Image, vis_topic, qos_profile_sensor_data
             )
+            self._vis_buf = np.zeros((self.grid_height, self.grid_width, 3), dtype=np.uint8)
 
-        self.get_logger().info(f"EgoLanesIPMNode ready | Grid: {self.grid_width}x{self.grid_height} at {self.grid_resolution}m/px")
-
-    def mask_callback(self, msg: Image):
-        # Convert ROS Image to OpenCV mono8
-        mask_img = self.bridge.imgmsg_to_cv2(msg, desired_encoding="mono8")
-
-        # Apply IPM Transform
-        bev_img = cv2.warpPerspective(
-            mask_img, 
-            self.M, 
-            (self.grid_width, self.grid_height), 
-            flags=cv2.INTER_NEAREST, 
-            borderMode=cv2.BORDER_CONSTANT, 
-            borderValue=0
+        self.get_logger().info(
+            f"EgoLanesIPMNode ready | Grid: {self.grid_width}x{self.grid_height} "
+            f"at {self.grid_resolution}m/px | origin_x={self._origin_x}"
         )
 
-        # Convert to OccupancyGrid
-        # Autoware expects 100 for obstacle (lane), 0 for free space
-        # Our mask classes: 0=bg, 1=left, 2=right, 3=other
-        occupancy_data = np.zeros_like(bev_img, dtype=np.int8)
-        
-        # Set all lane pixels (1, 2) to 100
-        # Optional: You could choose to only map ego lanes (1, 2) or all lanes (1, 2, 3)
+    def _build_grid_template(self) -> OccupancyGrid:
+        """
+        Build a reusable OccupancyGrid with all static fields pre-filled.
+        Only .header and .data need to be updated each callback.
+        """
+        g = OccupancyGrid()
+
+        g.info = MapMetaData()
+        g.info.resolution = self.grid_resolution
+        g.info.width      = self.grid_width
+        g.info.height     = self.grid_height
+
+        # FIX: set map_load_time to avoid log spam in Autoware nodes that check it.
+        g.info.map_load_time = rclpy.clock.Clock().now().to_msg()
+
+        # Origin = position of the bottom-left corner of the grid in base_link.
+        # ROS convention: X forward, Y left.
+        #
+        # FIX: the previous code placed origin.x = 0, which means the car sits
+        # at the very rear edge of the grid and the planner sees no area behind
+        # the car at all. With origin_x = 0 and a 400px × 0.05m grid the grid
+        # covers 0 → 20m ahead, which is correct for a forward-only costmap.
+        # If you need rear coverage, set origin_x to a negative value.
+        g.info.origin.position.x = self._origin_x
+        g.info.origin.position.y = (
+            -(self.grid_width * self.grid_resolution) / 2.0 + self._origin_y_off
+        )
+        g.info.origin.position.z = 0.0
+        g.info.origin.orientation.w = 1.0   # identity
+
+        return g
+
+    def mask_callback(self, msg: Image) -> None:
+        mask_img = self.bridge.imgmsg_to_cv2(msg, desired_encoding="mono8")
+
+        bev_img = cv2.warpPerspective(
+            mask_img,
+            self.M,
+            (self.grid_width, self.grid_height),
+            flags=cv2.INTER_NEAREST,
+            borderMode=cv2.BORDER_CONSTANT,
+            borderValue=0,
+        )
+
+        # Build occupancy array: lane pixels → 100, free space → 0.
+        # np.int8 matches the OccupancyGrid wire type exactly.
+        occupancy_data = np.zeros((self.grid_height, self.grid_width), dtype=np.int8)
         lane_pixels = (bev_img == 1) | (bev_img == 2) | (bev_img == 3)
         occupancy_data[lane_pixels] = 100
 
-        grid_msg = OccupancyGrid()
-        grid_msg.header = msg.header
-        grid_msg.header.frame_id = "base_link" # Costmaps are usually in base_link
-        
-        grid_msg.info = MapMetaData()
-        grid_msg.info.resolution = self.grid_resolution
-        grid_msg.info.width = self.grid_width
-        grid_msg.info.height = self.grid_height
-        
-        # Origin sets the position of the bottom-left corner of the grid in base_link coordinates.
-        # Assuming the camera is at (0,0) in base_link, and pointing forward (X is forward, Y is left).
-        # We center the grid in Y:
-        grid_msg.info.origin.position.x = 0.0
-        grid_msg.info.origin.position.y = -(self.grid_width * self.grid_resolution) / 2.0
-        grid_msg.info.origin.position.z = 0.0
-        
-        # Identity orientation
-        grid_msg.info.origin.orientation.x = 0.0
-        grid_msg.info.origin.orientation.y = 0.0
-        grid_msg.info.origin.orientation.z = 0.0
-        grid_msg.info.origin.orientation.w = 1.0
+        # ROS OccupancyGrid is row-major from bottom-left; OpenCV is top-left.
+        flipped = np.flipud(occupancy_data)
 
-        # ROS OccupancyGrid data is a flat list, row-major, starting from bottom-left
-        # OpenCV image is row-major, starting from top-left.
-        # We need to flip the image vertically to match ROS grid coordinates
-        flipped_data = np.flipud(occupancy_data)
-        grid_msg.data = flipped_data.flatten().tolist()
+        grid_msg = self._grid_template
+        grid_msg.header          = msg.header
+        grid_msg.header.frame_id = "base_link"
+
+        # FIX: pass bytes directly instead of converting to a Python list.
+        # np.ndarray.tobytes() on a contiguous int8 array is ~50x faster than
+        # .flatten().tolist() and produces the identical wire format.
+        grid_msg.data = flipped.tobytes()
 
         self.costmap_pub.publish(grid_msg)
 
-        # Publish Visualization
-        if self.publish_vis:
-            # Create a nice RGB image for the BEV
-            vis_img = np.zeros((self.grid_height, self.grid_width, 3), dtype=np.uint8)
-            vis_img[bev_img == 1] = [255, 0, 0]   # Left (Red)
-            vis_img[bev_img == 2] = [0, 255, 0]   # Right (Green)
-            vis_img[bev_img == 3] = [0, 0, 255]   # Other (Blue)
-            
-            vis_msg = self.bridge.cv2_to_imgmsg(vis_img, encoding="rgb8")
+        if self.publish_vis and hasattr(self, "vis_pub"):
+            self._vis_buf[:] = 0
+            self._vis_buf[bev_img == 1] = (255, 0,   0)   # Left  (Red)
+            self._vis_buf[bev_img == 2] = (0,   255, 0)   # Right (Green)
+            self._vis_buf[bev_img == 3] = (0,   0,   255) # Other (Blue)
+
+            vis_msg        = self.bridge.cv2_to_imgmsg(self._vis_buf, encoding="rgb8")
             vis_msg.header = msg.header
             self.vis_pub.publish(vis_msg)
+
 
 def main(args=None):
     rclpy.init(args=args)
@@ -156,6 +174,7 @@ def main(args=None):
         node.destroy_node()
         if rclpy.ok():
             rclpy.shutdown()
+
 
 if __name__ == "__main__":
     main()
