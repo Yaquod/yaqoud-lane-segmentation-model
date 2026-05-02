@@ -1,127 +1,260 @@
-# EgoLanesLite ROS 2 Integration Guide
+# egolanes_lite_ros2
 
-This repository contains the `egolanes_lite_ros2` package, a ROS 2 wrapper for performing real-time lane segmentation using the trained EgoLanesLite model via ONNX Runtime. This guide provides a full walkthrough for installing, configuring, and integrating the node with AWSIM and Autoware.
+A ROS 2 package that wraps the EgoLanesLite ONNX model for real-time lane segmentation and provides a full downstream pipeline: 2D mask → Bird's-Eye-View costmap → 3D metric point clusters.
+
+## Package Overview
+
+The package contains three nodes that form a sequential pipeline:
+
+```
+Camera Image
+    │
+    ▼
+egolanes_lite_node        → /perception/lane_detection/mask        (mono8)
+                          → /perception/lane_detection/mask_vis     (rgb8)
+    │
+    ├──▶ egolanes_ipm_node      → /perception/lane_detection/costmap   (OccupancyGrid)
+    │                           → /perception/lane_detection/ipm_vis   (rgb8)
+    │
+    └──▶ egolanes_vectorizer_node → /perception/lane_detection/left_cluster  (PointCloud2)
+                                  → /perception/lane_detection/right_cluster (PointCloud2)
+                                  → /perception/lane_detection/lane_markers  (MarkerArray)
+```
+
+### Node Descriptions
+
+| Node | Executable | Role |
+|---|---|---|
+| `EgoLanesLiteNode` | `egolanes_lite_node` | Runs ONNX inference on camera images, publishes a `mono8` class-ID mask |
+| `EgoLanesIPMNode` | `egolanes_ipm_node` | Applies Inverse Perspective Mapping to produce a top-down `OccupancyGrid` |
+| `EgoLanesVectorizerNode` | `egolanes_vectorizer_node` | Back-projects mask pixels to 3D metric points in `base_link` frame |
+
+### Mask Class IDs
+
+| Value | Meaning | Visualization color |
+|---|---|---|
+| `0` | Background | Black |
+| `1` | Ego-left lane boundary | Red |
+| `2` | Ego-right lane boundary | Green |
+| `3` | Other lanes | Blue |
+
+---
 
 ## Prerequisites
 
-- **ROS 2:** Humble (recommended) or Galactic.
-- **Autoware.Universe:** Installed and built.
-- **AWSIM:** For simulation-based testing.
-- **Python Dependencies:**
+- **ROS 2** Humble (recommended) or Galactic
+- **Python packages:**
   ```bash
   pip3 install onnxruntime-gpu opencv-python numpy
+  # Use onnxruntime (CPU-only) if no NVIDIA GPU is available
   ```
-  *(Note: You can use `onnxruntime` if you only plan to run on CPU, but GPU acceleration is highly recommended for real-time inference).*
+- **ROS 2 packages:** `cv_bridge`, `nav_msgs`, `sensor_msgs`, `visualization_msgs`, `tf2_ros`
 
-## 1. Installation
+---
 
-1. **Clone the Package:**
-   Clone or copy the `egolanes_lite_ros2` directory into the `src` folder of your Autoware workspace (or a standalone ROS 2 workspace):
+## Installation
+
+1. Clone into your workspace `src/`:
    ```bash
-   cd ~/autoware/src/universe/autoware.universe/perception/  # Example path
+   cd ~/autoware/src/universe/autoware.universe/perception/
    git clone <your-repo-url> egolanes_lite_ros2
    ```
 
-2. **Build the Package:**
-   Navigate to the root of your workspace and build the package using `colcon`:
+2. Build:
    ```bash
    cd ~/autoware
    colcon build --packages-select egolanes_lite_ros2 --symlink-install
    ```
 
-3. **Source the Workspace:**
+3. Source:
    ```bash
    source install/setup.bash
    ```
 
-## 2. Configuration & Model Preparation
+4. Place your ONNX model where the node can find it (see `model_path` below):
+   ```bash
+   cp EgoLanesLite_best.onnx ~/autoware/
+   ```
 
-The node parameters are defined in `config/params.yaml`. 
+---
+
+## Configuration
+
+All parameters live in `config/params.yaml`. The launch file loads this file automatically.
+
+### egolanes_lite_node
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
-| `model_path` | string | `EgoLanesLite_best.onnx` | Path to the ONNX model. Can be absolute or relative to the workspace/package. |
-| `image_topic` | string | `/sensing/camera/traffic_light/image_raw` | Input camera image topic. |
-| `mask_topic` | string | `/perception/lane_detection/mask` | Output `mono8` segmentation mask topic. |
-| `mask_vis_topic` | string | `/perception/lane_detection/mask_vis` | Output `rgb8` colored visualization topic. |
-| `input_h` | int | `400` | Model input height. |
+| `model_path` | string | `EgoLanesLite_best.onnx` | Path to ONNX model. Absolute or relative to workspace root. |
+| `image_topic` | string | `/sensing/camera/traffic_light/image_raw` | Input camera topic. |
+| `mask_topic` | string | `/perception/lane_detection/mask` | Output `mono8` class-ID mask. |
+| `mask_vis_topic` | string | `/perception/lane_detection/mask_vis` | Output `rgb8` colored overlay. |
+| `input_h` | int | `400` | Model input height (auto-corrected from ONNX graph if mismatched). |
 | `input_w` | int | `800` | Model input width. |
-| `threshold` | float | `0.5` | Confidence threshold for masking logic. |
-| `mean` | double[] | `[0.485, 0.456, 0.406]` | Image normalization mean values. |
-| `std` | double[] | `[0.229, 0.224, 0.225]` | Image normalization std dev values. |
-| `use_cuda` | bool | `true` | Enable CUDA (GPU) inference if available. |
+| `threshold` | float | `0.5` | Sigmoid threshold for lane/background decision. |
+| `mean` | float[] | `[0.485, 0.456, 0.406]` | ImageNet normalization mean. |
+| `std` | float[] | `[0.229, 0.224, 0.225]` | ImageNet normalization std. |
+| `use_cuda` | bool | `true` | Use CUDA if available; falls back to CPU silently. |
 
-### IPM Node Configuration (Costmap Generation)
-
-The package also includes an Inverse Perspective Mapping (IPM) node that runs alongside the segmentation model to project the 2D mask into a 3D top-down `OccupancyGrid`.
+### egolanes_ipm_node
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
-| `src_points` | float[] | `[480.0, 450.0, ...]` | A flat array of 4 (x,y) pixel coordinates forming a trapezoid on the original camera image. **MUST BE TUNED to your camera resolution and pitch.** |
-| `dst_points` | float[] | `[100.0, 0.0, ...]` | A flat array of 4 (x,y) coordinates forming a rectangle in the output BEV grid. |
-| `grid_resolution` | float | `0.05` | Meters per pixel for the output costmap. |
-| `grid_width` / `height` | int | `400` | Dimensions of the published `OccupancyGrid`. |
-| `publish_vis` | bool | `true` | Publishes a colorful BEV image to `/perception/lane_detection/ipm_vis` for tuning. |
+| `mask_topic` | string | `/perception/lane_detection/mask` | Input mask topic. |
+| `costmap_topic` | string | `/perception/lane_detection/costmap` | Output `OccupancyGrid`. |
+| `vis_topic` | string | `/perception/lane_detection/ipm_vis` | Output BEV visualization image. |
+| `src_points` | float[8] | see yaml | Flat array of 4 (x,y) pixel coords forming a trapezoid on the **800×400 mask**. Order: TL, TR, BR, BL. **Must be tuned to your camera.** |
+| `dst_points` | float[8] | `[100,0, 300,0, 300,400, 100,400]` | Flat array of 4 (x,y) coords forming a rectangle in the BEV grid. |
+| `grid_resolution` | float | `0.05` | Metres per pixel in the output costmap. |
+| `grid_width` | int | `400` | Costmap width in pixels. |
+| `grid_height` | int | `400` | Costmap height in pixels. |
+| `publish_vis` | bool | `true` | Publish BEV visualization to `vis_topic`. |
 
-**Model Placement:** Ensure your exported `EgoLanesLite_best.onnx` is located where the node can find it (e.g., in the workspace root, or use an absolute path in `params.yaml`).
+### egolanes_vectorizer_node
 
-## 3. AWSIM Integration Walkthrough
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `mask_topic` | string | `/perception/lane_detection/mask` | Input mask topic. |
+| `left_topic` | string | `/perception/lane_detection/left_cluster` | Output left lane `PointCloud2` in `base_link`. |
+| `right_topic` | string | `/perception/lane_detection/right_cluster` | Output right lane `PointCloud2` in `base_link`. |
+| `marker_topic` | string | `/perception/lane_detection/lane_markers` | Output `MarkerArray` polylines for RViz. |
+| `publish_markers` | bool | `true` | Enable marker publication. |
+| `base_link_frame` | string | `base_link` | Target TF frame for output points. |
+| `camera_frame` | string | `""` | Camera TF frame. Auto-detected from `camera_info` if empty. |
+| `use_tf_extrinsics` | bool | `true` | Use TF tree for camera→base_link transform (preferred). |
+| `camera_fx` / `camera_fy` | float | `600.0` | Focal lengths (fallback if no `camera_info`). |
+| `camera_cx` / `camera_cy` | float | `-1.0` | Principal point (`-1` = image centre). |
+| `camera_height_m` | float | `1.2` | Camera height above ground in metres (manual extrinsics fallback). |
+| `camera_pitch_deg` | float | `0.0` | Camera downward tilt in degrees (manual extrinsics fallback). |
+| `row_step` | int | `4` | Sample one centroid every N rows (lower = denser point cloud). |
+| `min_pixels_per_row` | int | `5` | Minimum lane pixels per row to emit a point (noise filter). |
+| `max_range_m` | float | `30.0` | Discard ground-projected points beyond this distance. |
 
-To validate the model in simulation using AWSIM:
+---
 
-1. **Launch AWSIM:** Start the AWSIM executable and load your desired map.
-2. **Identify the Target Camera:** AWSIM publishes multiple camera feeds. Find the forward-facing camera topic using:
+## Running
+
+### Launch all nodes
+
+```bash
+ros2 launch egolanes_lite_ros2 egolanes_lite.launch.py
+```
+
+This starts `egolanes_lite_node` and `egolanes_ipm_node` using `config/params.yaml`.
+
+> **Note:** `egolanes_vectorizer_node` is not included in the default launch file. Start it separately if needed:
+> ```bash
+> ros2 run egolanes_lite_ros2 egolanes_vectorizer_node --ros-args --params-file config/params.yaml
+> ```
+
+### Verify topics are publishing
+
+```bash
+ros2 topic list | grep lane_detection
+ros2 topic hz /perception/lane_detection/mask
+```
+
+---
+
+## AWSIM Integration
+
+1. Launch AWSIM and load your map.
+
+2. Find the forward camera topic:
    ```bash
    ros2 topic list | grep camera
    ```
-   *(Let's assume the topic is `/sensing/camera/front/image_raw`)*
-3. **Update Configuration:** 
-   Edit `config/params.yaml` and update the `image_topic` to match the AWSIM camera:
+
+3. Update `image_topic` in `config/params.yaml`:
    ```yaml
    egolanes_lite_node:
      ros__parameters:
        image_topic: "/sensing/camera/front/image_raw"
-       # ...
    ```
-4. **Run the Node:**
-   Execute the launch file:
+
+4. Launch:
    ```bash
    ros2 launch egolanes_lite_ros2 egolanes_lite.launch.py
    ```
-5. **Visualize Results:**
-   Open **RViz** (or `rqt_image_view`) to see the live outputs. The package publishes three topics:
-   - `/perception/lane_detection/mask`: The raw `mono8` mask (0, 1, 2, 3) used by the downstream planner. *(Note: This will look pitch black in RViz!)*
-   - `/perception/lane_detection/mask_vis`: A brightly colored 2D overlay of the predicted lanes.
-   - `/perception/lane_detection/ipm_vis`: A brightly colored top-down Bird's-Eye-View projection.
 
-   **Crucial Tuning Step:** Look at `/perception/lane_detection/ipm_vis`. If the lanes do not look perfectly parallel and straight, you must adjust the `src_points` in `params.yaml` to match your AWSIM camera's resolution and pitch.
+5. Open RViz and add these topics:
+   - `/perception/lane_detection/mask_vis` — 2D colored lane overlay
+   - `/perception/lane_detection/ipm_vis` — top-down BEV projection
+   - `/perception/lane_detection/costmap` — OccupancyGrid
 
-## 4. Autoware Integration Walkthrough
+6. **Tune `src_points`:** Look at `ipm_vis`. If lanes are not parallel and straight, adjust the `src_points` trapezoid in `params.yaml` to match your camera's resolution and pitch. Valid range for an 800×400 mask: x ∈ [0, 800], y ∈ [0, 400].
 
-To embed the EgoLanesLite node permanently into the Autoware perception stack:
+---
 
-1. **Locate Autoware Launch Files:**
-   Find the launch file responsible for perception modules in your Autoware setup. This is typically located at:
-   `autoware_launch/launch/tier4_perception_launch/launch/perception.launch.xml`
-   *(Path may vary depending on your specific Autoware.Universe configuration).*
+## Autoware Integration
 
-2. **Include the Node Launch:**
-   Inject the `egolanes_lite.launch.py` into the perception launch file. You can override parameters directly in the XML to ensure it connects to the correct Autoware sensing topics.
+1. Locate the Autoware perception launch file (path varies by setup):
+   ```
+   autoware_launch/launch/tier4_perception_launch/launch/perception.launch.xml
+   ```
+
+2. Include the node inside the perception group:
    ```xml
-   <!-- Add inside the perception group/pipeline -->
    <group>
      <push-ros-namespace namespace="lane_detection"/>
-     <include file="$(find-pkg-share egolanes_lite_ros2)/launch/egolanes_lite.launch.py">
-       <!-- Override config if necessary -->
-     </include>
+     <include file="$(find-pkg-share egolanes_lite_ros2)/launch/egolanes_lite.launch.py"/>
    </group>
    ```
 
-3. **Downstream Pipeline Consideration (The IPM Node):**
-   Autoware's planning modules do not understand raw 2D semantic images. They expect spatial data like `OccupancyGrids` or `PointClusters`.
-   To solve this, the launch file automatically starts the **`egolanes_ipm_node`**. This node acts as a bridge:
-   - It subscribes to your raw `/perception/lane_detection/mask`.
-   - It applies an Inverse Perspective Mapping (IPM) projection.
-   - It publishes a `nav_msgs/OccupancyGrid` on `/perception/lane_detection/costmap` in the `base_link` frame.
-   
-   Once your `src_points` are tuned, you can simply configure Autoware's `freespace_planner` or `costmap_generator` to subscribe to this `/perception/lane_detection/costmap` topic, and the vehicle will treat the lane boundaries as obstacles!
+3. Configure Autoware's `freespace_planner` or `costmap_generator` to subscribe to:
+   ```
+   /perception/lane_detection/costmap
+   ```
+   The costmap is published in the `base_link` frame with lane boundaries marked at occupancy value `100`.
+
+4. For planning with 3D lane clusters, subscribe to:
+   ```
+   /perception/lane_detection/left_cluster
+   /perception/lane_detection/right_cluster
+   ```
+
+---
+
+## Camera Calibration for the Vectorizer Node
+
+The vectorizer node needs camera intrinsics and extrinsics to back-project pixels to 3D.
+
+**Intrinsics (preferred — live topic):**
+```bash
+ros2 topic echo /sensing/camera/traffic_light/camera_info --once
+```
+Look for the `K` matrix: `[fx, 0, cx, 0, fy, cy, 0, 0, 1]`. Set `camera_fx`, `camera_fy`, `camera_cx`, `camera_cy` in `params.yaml`.
+
+**Extrinsics (preferred — TF tree):**
+If Autoware's sensor calibration is loaded, the node auto-detects the camera frame from `camera_info` and looks up the transform. No manual configuration needed.
+
+**Extrinsics (fallback — manual):**
+Set `use_tf_extrinsics: false` and provide:
+- `camera_height_m`: measure from road surface to camera lens
+- `camera_pitch_deg`: downward tilt (0 = horizontal, positive = nose-down)
+
+---
+
+## Troubleshooting
+
+**Mask looks pitch black in RViz:**
+This is expected for the raw `mask` topic — pixel values are 0–3, which appear black. Use `mask_vis` instead.
+
+**`FileNotFoundError` for ONNX model:**
+The node searches the current working directory and all parent directories. Use an absolute path in `model_path` to be safe:
+```yaml
+model_path: "/home/user/models/EgoLanesLite_best.onnx"
+```
+
+**IPM output looks distorted:**
+The `src_points` trapezoid is sized for an 800×400 image (the model output mask). Do not use coordinates from the original camera resolution. Tune using the `ipm_vis` topic.
+
+**Vectorizer publishes empty point clouds:**
+Check that `camera_info` is being published on the expected topic. If TF lookup fails, the node falls back to manual extrinsics and logs a warning — verify `camera_height_m` and `camera_pitch_deg` are set correctly.
+
+**CUDA not used despite `use_cuda: true`:**
+Verify `onnxruntime-gpu` is installed and that `CUDAExecutionProvider` appears in:
+```python
+import onnxruntime; print(onnxruntime.get_available_providers())
+```
