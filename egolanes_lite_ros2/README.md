@@ -143,10 +143,7 @@ ros2 launch egolanes_lite_ros2 egolanes_lite.launch.py
 
 This starts `egolanes_lite_node` and `egolanes_ipm_node` using `config/params.yaml`.
 
-> **Note:** `egolanes_vectorizer_node` is not included in the default launch file. Start it separately if needed:
-> ```bash
-> ros2 run egolanes_lite_ros2 egolanes_vectorizer_node --ros-args --params-file config/params.yaml
-> ```
+This starts all three nodes: `egolanes_lite_node`, `egolanes_ipm_node`, and `egolanes_vectorizer_node`.
 
 ### Verify topics are publishing
 

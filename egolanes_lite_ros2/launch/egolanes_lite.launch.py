@@ -24,6 +24,13 @@ def generate_launch_description():
                 name="egolanes_ipm_node",
                 parameters=[config],
                 output="screen",
-            )
+            ),
+            Node(
+                package="egolanes_lite_ros2",
+                executable="egolanes_vectorizer_node",
+                name="egolanes_vectorizer_node",
+                parameters=[config],
+                output="screen",
+            ),
         ]
     )
