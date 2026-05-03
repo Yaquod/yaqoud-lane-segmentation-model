@@ -51,6 +51,7 @@ egolanes_vectorizer_node:
     # These MUST come from your camera calibration file (camera_info topic or
     # the .yaml produced by camera_calibration). Look for the K matrix:
     #
+
     #   K: [fx, 0, cx,
     #        0, fy, cy,
     #        0,  0,  1]
@@ -62,6 +63,7 @@ egolanes_vectorizer_node:
     ### ros2 topic echo /sensing/camera/traffic_light/camera_info --once
     #
     # For an 800×400 image with a typical dashcam, fx/fy ≈ 500–800.
+
     # Set camera_cx / camera_cy to -1 to auto-use image_width/2, image_height/2.
     #
     camera_fx: 600.0   # <-- replace with your calibrated value

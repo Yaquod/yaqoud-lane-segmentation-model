@@ -26,7 +26,8 @@ setup(
     entry_points={
         "console_scripts": [
             "egolanes_lite_node = egolanes_lite_ros2.egolanes_lite_node:main",
-            "egolanes_ipm_node = egolanes_lite_ros2.egolanes_ipm_node:main"
+            "egolanes_ipm_node = egolanes_lite_ros2.egolanes_ipm_node:main",
+            "egolanes_vectorizer_node = egolanes_lite_ros2.egolanes_vectorizer_node:main"
         ],
     },
 )
