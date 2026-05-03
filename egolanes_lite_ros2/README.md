@@ -89,10 +89,11 @@ To validate the model in simulation using AWSIM:
    ros2 launch egolanes_lite_ros2 egolanes_lite.launch.py
    ```
 5. **Visualize Results:**
-   Open **RViz** (or `rqt_image_view`) to see the live outputs. The package publishes three topics:
-   - `/perception/lane_detection/mask`: The raw `mono8` mask (0, 1, 2, 3) used by the downstream planner. *(Note: This will look pitch black in RViz!)*
-   - `/perception/lane_detection/mask_vis`: A brightly colored 2D overlay of the predicted lanes.
-   - `/perception/lane_detection/ipm_vis`: A brightly colored top-down Bird's-Eye-View projection.
+   Open `rqt_image_view` to see the live segmentation mask published by the node:
+   ```bash
+   ros2 run rqt_image_view rqt_image_view
+   ```
+   Select `/perception/lane_detection/mask` from the dropdown. *Note: The output is a `mono8` image where pixel values map to class IDs (0: background, 1: left lane, 2: right lane, 3: other).*
 
    **Crucial Tuning Step:** Look at `/perception/lane_detection/ipm_vis`. If the lanes do not look perfectly parallel and straight, you must adjust the `src_points` in `params.yaml` to match your AWSIM camera's resolution and pitch.
 
