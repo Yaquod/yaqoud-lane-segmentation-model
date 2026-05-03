@@ -99,7 +99,7 @@ def _rotation_from_height_pitch(
     R = np.array([
         [ 0,  sp,  cp],
         [-1,   0,   0],
-        [ 0,  cp, -sp],
+        [ 0, -cp,  sp],
     ], dtype=np.float64)
     t = np.array([0.0, 0.0, height_m], dtype=np.float64)
     return R, t
